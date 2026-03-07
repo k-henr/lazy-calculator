@@ -1,0 +1,20 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        // Configure to automatically compile the typescript to js
+        {
+            "label": "esbuild watch",
+            "type": "shell",
+            "command": "npx esbuild index.ts --bundle --outfile=index.js --watch",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        }
+    ]
+}

@@ -3,7 +3,25 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="index.css" />
         <title>Lazy Calculator</title>
     </head>
-    <body></body>
+    <body>
+        <div id="calculator">
+            <div id="expressions"></div>
+            <button id="expression-adder">
+                <img src="/icons/plus.svg" />
+            </button>
+        </div>
+    </body>
+
+    <!-- A template for expressions -->
+    <template id="expression-template">
+        <div class="expression">
+            <input class="expression-edit-field" type="text" />
+            <img class="remove-expression" src="/icons/cross.svg" />
+        </div>
+    </template>
+
+    <script src="index.js"></script>
 </html>
