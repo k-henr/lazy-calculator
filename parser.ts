@@ -1,0 +1,247 @@
+import { Calculator } from "./calculator";
+
+export class Parser {
+    inputString: string;
+
+    tokens: Token[] | null = null;
+    peek(): Token {
+        return this.tokens![this.tokens!.length - 1];
+    }
+    pop(): Token {
+        return this.tokens!.pop()!;
+    }
+    expect(type: TokenType): Token {
+        const token = this.pop()!;
+        if (token.type !== type)
+            throw new Error(`Expected type ${type} but got ${token.type}!`);
+        return token;
+    }
+
+    astTree: DirtyAstTreeNode = 0;
+
+    constructor(inputString: string) {
+        this.inputString = inputString;
+    }
+
+    evaluate(calculator: Calculator): number | null {
+        this.tokenize();
+        this.buildTree();
+        return this.evaluateTree(calculator, this.astTree);
+    }
+
+    /**
+     * Tokenize this parser's expression.
+     */
+    tokenize() {
+        const matchedTokens = this.inputString.matchAll(tokenizer);
+
+        const tokens: (Token | VariableToken | NumberToken)[] = [];
+        for (const match of matchedTokens) {
+            const { groups } = match;
+            if (!groups) continue; // Ignore empty matches to get rid of warning
+
+            // Find the type, chosen by the first group that matched
+            const type = tokenPatterns.find(
+                ({ type }) => groups[type] !== undefined,
+            )?.type;
+            if (!type) continue; // get rid of warning
+
+            // Add the token, and additional info if needed
+            switch (type) {
+                case "VAR":
+                    tokens.unshift({ type, variableName: groups[type] });
+                    break;
+                case "NUM":
+                    tokens.unshift({ type, value: Number(groups[type]) });
+                    break;
+                case "INVALID":
+                    throw new Error(`Invalid token '${groups[type]}'!`);
+                default:
+                    tokens.unshift({ type });
+            }
+        }
+
+        tokens.unshift({ type: "END" });
+
+        this.tokens = tokens;
+    }
+
+    // Convert to AST tree
+    buildTree() {
+        if (!this.tokens)
+            throw new Error(
+                "Expression tried to parse before being tokenized!",
+            );
+
+        // Special case for empty expressiont
+        if (this.peek().type === "END") {
+            this.astTree = 0;
+        } else {
+            this.astTree = this.getExpression();
+        }
+    }
+
+    getExpression(): DirtyAstTreeNode {
+        let value1: DirtyAstTreeNode = this.getTerm();
+
+        const tokenChecks: TokenType[] = ["ADD", "SUB"];
+        while (tokenChecks.includes(this.peek().type)) {
+            const operator = this.pop().type;
+            const value2 = this.getTerm();
+            value1 = {
+                operator,
+                value1,
+                value2,
+            };
+        }
+
+        // If the next token isn't RPAREN or END, the expression is malformed
+        const t = this.peek().type;
+        if (t !== "END" && t !== "RPAREN") {
+            throw new Error("Expected RPAREN or END but got " + t);
+        }
+
+        return value1;
+    }
+
+    getTerm(): DirtyAstTreeNode {
+        let value1: DirtyAstTreeNode = this.getFactor();
+
+        const tokenChecks: TokenType[] = ["MUL", "DIV"];
+        while (tokenChecks.includes(this.peek().type)) {
+            const operator = this.pop().type;
+            const value2 = this.getTerm();
+            value1 = {
+                operator,
+                value1,
+                value2,
+            };
+        }
+        return value1;
+    }
+
+    // Exponentiation (right-associative)
+    getFactor(): DirtyAstTreeNode {
+        let value1: DirtyAstTreeNode = this.getUnary();
+
+        const tokenChecks: TokenType[] = ["EXP"];
+        if (tokenChecks.includes(this.peek().type)) {
+            const operator = this.pop().type;
+            const value2 = this.getFactor(); // right-associativity requires recursion rather than loops
+            value1 = {
+                operator,
+                value1,
+                value2,
+            };
+        }
+        return value1;
+    }
+
+    // Unary minus
+    getUnary(): DirtyAstTreeNode {
+        if (this.peek().type === "SUB") {
+            this.pop();
+            return { operator: "SUB", value1: 0, value2: this.getPrimary() };
+        } else return this.getPrimary();
+    }
+
+    getPrimary(): DirtyAstTreeNode {
+        const t = this.pop();
+        if (t.type === "NUM") {
+            return (t as NumberToken).value;
+        }
+        if (t.type === "VAR") {
+            return (t as VariableToken).variableName;
+        }
+        if (t.type === "LPAREN") {
+            const expr = this.getExpression();
+            this.expect("RPAREN");
+            return expr;
+        }
+        throw new Error(`Unexpected token ${t.type}`);
+    }
+
+    evaluateTree(
+        calculator: Calculator,
+        node: DirtyAstTreeNode | undefined,
+    ): number {
+        if (node === undefined) return 0;
+
+        if (typeof node === "string") {
+            if (calculator.fieldDefinitions[node]) {
+                const computedValue = calculator.fieldDefinitions[node];
+                if (!computedValue)
+                    throw new Error("Hasn't computed value of dependency yet!");
+                return computedValue;
+            } else throw new Error(`Couldn't find field '${node}'!`);
+        }
+        if (typeof node === "number") {
+            // not being caught
+            return Number(node);
+        }
+        node = node as AstTreeNode;
+
+        const v1 = this.evaluateTree(calculator, node.value1);
+        const v2 = this.evaluateTree(calculator, node.value2);
+
+        switch (node.operator) {
+            case "ADD":
+                return v1 + v2;
+            case "SUB":
+                return v1 - v2;
+            case "DIV":
+                return v1 / v2;
+            case "MUL":
+                return v1 * v2;
+            case "EXP":
+                return Math.pow(v1, v2);
+        }
+
+        throw new Error("Unknown operator " + node.operator); // Something weird happened!
+    }
+}
+
+// This is where tokens types are defined, by a matcher and a type
+const tokenPatterns: { pattern: RegExp; type: TokenType }[] = [
+    { pattern: /(?<VAR>[A-Za-z]\w*)/, type: "VAR" },
+    { pattern: /(?<NUM>\d+(\.\d+)?)/, type: "NUM" },
+    { pattern: /(?<ADD>\+)/, type: "ADD" },
+    { pattern: /(?<SUB>-)/, type: "SUB" },
+    { pattern: /(?<MUL>\*)/, type: "MUL" },
+    { pattern: /(?<DIV>\/)/, type: "DIV" },
+    { pattern: /(?<EXP>\^)/, type: "EXP" },
+    { pattern: /(?<LPAREN>\()/, type: "LPAREN" },
+    { pattern: /(?<RPAREN>\))/, type: "RPAREN" },
+    { pattern: /(?<INVALID>[^\s])/, type: "INVALID" },
+];
+
+// Combine the token matchers to get a single tokenizer
+const tokenizer = new RegExp(
+    tokenPatterns.map(({ pattern }) => pattern.source).join("|"),
+    "g",
+);
+
+type TokenType =
+    | "VAR"
+    | "NUM"
+    | "ADD"
+    | "SUB"
+    | "MUL"
+    | "DIV"
+    | "EXP"
+    | "LPAREN"
+    | "RPAREN"
+    | "END"
+    | "INVALID";
+type Token = {
+    type: TokenType;
+};
+type NumberToken = Token & { value: number };
+type VariableToken = Token & { variableName: string };
+
+type AstTreeNode = {
+    operator: TokenType;
+    value1?: DirtyAstTreeNode;
+    value2?: DirtyAstTreeNode;
+};
+type DirtyAstTreeNode = AstTreeNode | number | string;

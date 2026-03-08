@@ -1,55 +1,5 @@
 (() => {
-  // calculator.ts
-  var Calculator = class {
-    expressionListElement;
-    constructor(expressionList2) {
-      this.expressionListElement = expressionList2;
-    }
-    /**
-     * Add a new, empty expression to this calculator.
-     */
-    addExpression() {
-      const template = document.getElementById(
-        "expression-template"
-      );
-      const exprElement = template.content.cloneNode(true).querySelector(".expression");
-      const expression = {
-        expressionString: "",
-        element: exprElement,
-        computedValue: null
-      };
-      exprElement.querySelector(
-        ".expression-edit-field"
-      ).onchange = (e) => {
-        const target = e.target;
-        this.setExpressionContent(expression, target.value);
-      };
-      exprElement.querySelector(
-        ".remove-expression"
-      ).onclick = () => {
-        this.removeExpression(expression);
-      };
-      this.expressionListElement.appendChild(exprElement);
-    }
-    /**
-     * Remove the given expression.
-     * @param expression The expression to remove
-     */
-    removeExpression(expression) {
-      this.expressionListElement.removeChild(expression.element);
-    }
-    /**
-     * Set the content of the given expression to something new.
-     * @param expression The expression to change
-     * @param newValue The new content of this expression
-     */
-    setExpressionContent(expression, newValue) {
-      expression.expressionString = newValue;
-      const parser = new Parser(newValue);
-      expression.computedValue = parser.evaluate();
-      console.log(expression.computedValue);
-    }
-  };
+  // parser.ts
   var Parser = class {
     inputString;
     tokens = null;
@@ -69,20 +19,16 @@
     constructor(inputString) {
       this.inputString = inputString;
     }
-    evaluate() {
+    evaluate(calculator2) {
       this.tokenize();
-      console.log(this.tokens);
       this.buildTree();
-      console.log(this.astTree);
-      return this.evaluateTree(this.astTree);
+      return this.evaluateTree(calculator2, this.astTree);
     }
     /**
      * Tokenize this parser's expression.
-     * @returns The parsed result, or null if the expression gives no result
      */
     tokenize() {
       const matchedTokens = this.inputString.matchAll(tokenizer);
-      if (!matchedTokens) return [];
       const tokens = [];
       for (const match of matchedTokens) {
         const { groups } = match;
@@ -98,6 +44,8 @@
           case "NUM":
             tokens.unshift({ type, value: Number(groups[type]) });
             break;
+          case "INVALID":
+            throw new Error(`Invalid token '${groups[type]}'!`);
           default:
             tokens.unshift({ type });
         }
@@ -111,7 +59,11 @@
         throw new Error(
           "Expression tried to parse before being tokenized!"
         );
-      this.astTree = this.getExpression();
+      if (this.peek().type === "END") {
+        this.astTree = 0;
+      } else {
+        this.astTree = this.getExpression();
+      }
     }
     getExpression() {
       let value1 = this.getTerm();
@@ -180,19 +132,24 @@
         this.expect("RPAREN");
         return expr;
       }
-      throw new Error(`Unexpected token ${t}`);
+      throw new Error(`Unexpected token ${t.type}`);
     }
-    evaluateTree(node) {
+    evaluateTree(calculator2, node) {
       if (node === void 0) return 0;
       if (typeof node === "string") {
-        return 0;
+        if (calculator2.fieldDefinitions[node]) {
+          const computedValue = calculator2.fieldDefinitions[node];
+          if (!computedValue)
+            throw new Error("Hasn't computed value of dependency yet!");
+          return computedValue;
+        } else throw new Error(`Couldn't find field '${node}'!`);
       }
       if (typeof node === "number") {
         return Number(node);
       }
       node = node;
-      const v1 = this.evaluateTree(node.value1);
-      const v2 = this.evaluateTree(node.value2);
+      const v1 = this.evaluateTree(calculator2, node.value1);
+      const v2 = this.evaluateTree(calculator2, node.value2);
       switch (node.operator) {
         case "ADD":
           return v1 + v2;
@@ -210,19 +167,114 @@
   };
   var tokenPatterns = [
     { pattern: /(?<VAR>[A-Za-z]\w*)/, type: "VAR" },
-    { pattern: /(?<NUM>\d+)/, type: "NUM" },
+    { pattern: /(?<NUM>\d+(\.\d+)?)/, type: "NUM" },
     { pattern: /(?<ADD>\+)/, type: "ADD" },
     { pattern: /(?<SUB>-)/, type: "SUB" },
     { pattern: /(?<MUL>\*)/, type: "MUL" },
     { pattern: /(?<DIV>\/)/, type: "DIV" },
     { pattern: /(?<EXP>\^)/, type: "EXP" },
     { pattern: /(?<LPAREN>\()/, type: "LPAREN" },
-    { pattern: /(?<RPAREN>\))/, type: "RPAREN" }
+    { pattern: /(?<RPAREN>\))/, type: "RPAREN" },
+    { pattern: /(?<INVALID>[^\s])/, type: "INVALID" }
   ];
   var tokenizer = new RegExp(
     tokenPatterns.map(({ pattern }) => pattern.source).join("|"),
     "g"
   );
+
+  // calculator.ts
+  var Expression = class {
+    calculator;
+    element;
+    resultElement;
+    expressionString;
+    definedField = null;
+    template = document.getElementById(
+      "expression-template"
+    );
+    constructor(calculator2, expressionString) {
+      this.calculator = calculator2;
+      this.expressionString = expressionString;
+      this.element = this.template.content.cloneNode(true).querySelector(".expression");
+      this.resultElement = this.element.querySelector(".expression-result");
+      if (this.resultElement === null)
+        throw new Error("Result element not found on expression template!");
+      this.element.querySelector(
+        ".expression-edit-field"
+      ).onchange = (e) => {
+        const target = e.target;
+        this.setContent(target.value);
+      };
+      this.element.querySelector(
+        ".remove-expression"
+      ).onclick = () => {
+        calculator2.removeExpression(this);
+      };
+      calculator2.expressionListElement.appendChild(this.element);
+      this.evaluate;
+    }
+    setContent(newContent) {
+      this.expressionString = newContent;
+      this.evaluate();
+    }
+    evaluate() {
+      const parts = this.expressionString.split("=");
+      let computedValue = 0;
+      if (parts.length === 1) {
+        const parser = new Parser(parts[0]);
+        computedValue = parser.evaluate(this.calculator) ?? 0;
+      } else if (parts.length === 2) {
+        delete this.calculator.fieldDefinitions[this.definedField ?? ""];
+        const leftSide = parts[0].trim();
+        if (!leftSide.match(/^[A-Za-z]\w*$/g))
+          throw new Error(`Invalid variable name '${leftSide}'!`);
+        this.definedField = leftSide;
+        const parser = new Parser(parts[1]);
+        computedValue = parser.evaluate(this.calculator) ?? 0;
+        if (this.calculator.fieldDefinitions[this.definedField])
+          throw new Error(
+            `Field '${this.definedField}' is already defined!`
+          );
+        else
+          this.calculator.fieldDefinitions[this.definedField] = computedValue;
+      } else {
+        throw new Error("Too many equals signs!");
+      }
+      this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(computedValue * 1e4) / 1e4}`;
+    }
+  };
+  var Calculator = class {
+    expressionListElement;
+    fieldDefinitions = {};
+    constructor(expressionList2) {
+      this.expressionListElement = expressionList2;
+    }
+    /**
+     * Add a new, empty expression to this calculator.
+     */
+    addExpression() {
+      const expression = new Expression(this, "");
+    }
+    /**
+     * Remove the given expression.
+     * @param expression The expression to remove
+     */
+    removeExpression(expression) {
+      this.expressionListElement.removeChild(expression.element);
+    }
+    /**
+     * Set the content of the given expression to something new.
+     * @param expression The expression to change
+     * @param newValue The new content of this expression
+     */
+    setExpressionContent(expression, newValue) {
+      const definedField = expression.definedField;
+      if (definedField) {
+        delete this.fieldDefinitions[definedField];
+      }
+      expression.setContent(newValue);
+    }
+  };
 
   // index.ts
   var expressionList = document.getElementById("expressions");

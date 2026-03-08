@@ -1,4 +1,4 @@
-- Better error messages when using disallowed symbols
-- Variable definitons + lookups
+- Automatic updates to expressions when their dependecy changes
+- Add error popups for elements
 - Make it lazy
 - Functions

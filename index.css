@@ -30,8 +30,14 @@ body {
 
     display: flex;
     align-items: center;
+    gap: 4px;
 
     border: 1px solid black;
+}
+
+.expression * {
+    font-family: "Courier New", Courier, monospace;
+    font-weight: bold;
 }
 
 .expression > input {
@@ -39,8 +45,6 @@ body {
     height: 100%;
 
     font-size: 16px;
-    font-family: "Courier New", Courier, monospace;
-    font-weight: bold;
     padding: 0px 10px;
 
     border: none;
