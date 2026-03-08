@@ -1,4 +1,4 @@
-import { Calculator } from "./calculator";
+import { Calculator, Expression } from "./calculator";
 
 export class Parser {
     inputString: string;
@@ -23,10 +23,10 @@ export class Parser {
         this.inputString = inputString;
     }
 
-    evaluate(calculator: Calculator): number | null {
+    evaluate(expression: Expression): number | null {
         this.tokenize();
         this.buildTree();
-        return this.evaluateTree(calculator, this.astTree);
+        return this.evaluateTree(expression, this.astTree);
     }
 
     /**
@@ -162,18 +162,17 @@ export class Parser {
     }
 
     evaluateTree(
-        calculator: Calculator,
+        expression: Expression,
         node: DirtyAstTreeNode | undefined,
     ): number {
         if (node === undefined) return 0;
 
         if (typeof node === "string") {
-            if (calculator.fieldDefinitions[node]) {
-                const computedValue = calculator.fieldDefinitions[node];
-                if (!computedValue)
-                    throw new Error("Hasn't computed value of dependency yet!");
-                return computedValue;
-            } else throw new Error(`Couldn't find field '${node}'!`);
+            const dependency = expression.calculator.fieldDefinitions[node];
+            if (!dependency) throw new Error(`Couldn't find field '${node}'!`);
+
+            dependency.usedBy.add(expression);
+            return dependency.value;
         }
         if (typeof node === "number") {
             // not being caught
@@ -181,8 +180,8 @@ export class Parser {
         }
         node = node as AstTreeNode;
 
-        const v1 = this.evaluateTree(calculator, node.value1);
-        const v2 = this.evaluateTree(calculator, node.value2);
+        const v1 = this.evaluateTree(expression, node.value1);
+        const v2 = this.evaluateTree(expression, node.value2);
 
         switch (node.operator) {
             case "ADD":

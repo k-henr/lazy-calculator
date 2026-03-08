@@ -1,4 +1,3 @@
-- Automatic updates to expressions when their dependecy changes
 - Add error popups for elements
 - Make it lazy
 - Functions

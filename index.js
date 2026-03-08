@@ -19,10 +19,10 @@
     constructor(inputString) {
       this.inputString = inputString;
     }
-    evaluate(calculator2) {
+    evaluate(expression) {
       this.tokenize();
       this.buildTree();
-      return this.evaluateTree(calculator2, this.astTree);
+      return this.evaluateTree(expression, this.astTree);
     }
     /**
      * Tokenize this parser's expression.
@@ -134,22 +134,20 @@
       }
       throw new Error(`Unexpected token ${t.type}`);
     }
-    evaluateTree(calculator2, node) {
+    evaluateTree(expression, node) {
       if (node === void 0) return 0;
       if (typeof node === "string") {
-        if (calculator2.fieldDefinitions[node]) {
-          const computedValue = calculator2.fieldDefinitions[node];
-          if (!computedValue)
-            throw new Error("Hasn't computed value of dependency yet!");
-          return computedValue;
-        } else throw new Error(`Couldn't find field '${node}'!`);
+        const dependency = expression.calculator.fieldDefinitions[node];
+        if (!dependency) throw new Error(`Couldn't find field '${node}'!`);
+        dependency.usedBy.add(expression);
+        return dependency.value;
       }
       if (typeof node === "number") {
         return Number(node);
       }
       node = node;
-      const v1 = this.evaluateTree(calculator2, node.value1);
-      const v2 = this.evaluateTree(calculator2, node.value2);
+      const v1 = this.evaluateTree(expression, node.value1);
+      const v2 = this.evaluateTree(expression, node.value2);
       switch (node.operator) {
         case "ADD":
           return v1 + v2;
@@ -189,12 +187,15 @@
     resultElement;
     expressionString;
     definedField = null;
+    value;
+    usedBy = /* @__PURE__ */ new Set();
     template = document.getElementById(
       "expression-template"
     );
     constructor(calculator2, expressionString) {
       this.calculator = calculator2;
       this.expressionString = expressionString;
+      this.value = 0;
       this.element = this.template.content.cloneNode(true).querySelector(".expression");
       this.resultElement = this.element.querySelector(".expression-result");
       if (this.resultElement === null)
@@ -211,7 +212,7 @@
         calculator2.removeExpression(this);
       };
       calculator2.expressionListElement.appendChild(this.element);
-      this.evaluate;
+      this.evaluate();
     }
     setContent(newContent) {
       this.expressionString = newContent;
@@ -219,10 +220,9 @@
     }
     evaluate() {
       const parts = this.expressionString.split("=");
-      let computedValue = 0;
       if (parts.length === 1) {
         const parser = new Parser(parts[0]);
-        computedValue = parser.evaluate(this.calculator) ?? 0;
+        this.value = parser.evaluate(this) ?? 0;
       } else if (parts.length === 2) {
         delete this.calculator.fieldDefinitions[this.definedField ?? ""];
         const leftSide = parts[0].trim();
@@ -230,17 +230,19 @@
           throw new Error(`Invalid variable name '${leftSide}'!`);
         this.definedField = leftSide;
         const parser = new Parser(parts[1]);
-        computedValue = parser.evaluate(this.calculator) ?? 0;
+        this.value = parser.evaluate(this) ?? 0;
         if (this.calculator.fieldDefinitions[this.definedField])
           throw new Error(
             `Field '${this.definedField}' is already defined!`
           );
-        else
-          this.calculator.fieldDefinitions[this.definedField] = computedValue;
+        this.calculator.fieldDefinitions[this.definedField] = this;
+        for (const user of this.usedBy) {
+          user.evaluate();
+        }
       } else {
         throw new Error("Too many equals signs!");
       }
-      this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(computedValue * 1e4) / 1e4}`;
+      this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e4) / 1e4}`;
     }
   };
   var Calculator = class {

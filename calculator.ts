@@ -1,6 +1,6 @@
 import { Parser } from "./parser";
 
-class Expression {
+export class Expression {
     calculator: Calculator;
 
     element: HTMLElement;
@@ -8,6 +8,9 @@ class Expression {
 
     expressionString: string;
     definedField: string | null = null;
+    value: number;
+
+    usedBy: Set<Expression> = new Set();
 
     template = document.getElementById(
         "expression-template",
@@ -16,6 +19,7 @@ class Expression {
     constructor(calculator: Calculator, expressionString: string) {
         this.calculator = calculator;
         this.expressionString = expressionString;
+        this.value = 0;
 
         this.element = (
             this.template.content.cloneNode(true) as HTMLElement
@@ -43,7 +47,7 @@ class Expression {
         // Add the graphical expression to the DOM
         calculator.expressionListElement.appendChild(this.element);
 
-        this.evaluate;
+        this.evaluate();
     }
 
     setContent(newContent: string) {
@@ -55,12 +59,10 @@ class Expression {
         // Split into declaration and definition around an = sign (kinda yucky)
         const parts = this.expressionString.split("=");
 
-        let computedValue = 0;
-
         if (parts.length === 1) {
             // Simple expression
             const parser = new Parser(parts[0]);
-            computedValue = parser.evaluate(this.calculator) ?? 0;
+            this.value = parser.evaluate(this) ?? 0;
         } else if (parts.length === 2) {
             delete this.calculator.fieldDefinitions[this.definedField ?? ""];
 
@@ -71,29 +73,31 @@ class Expression {
             this.definedField = leftSide;
 
             const parser = new Parser(parts[1]);
-            computedValue = parser.evaluate(this.calculator) ?? 0;
+            this.value = parser.evaluate(this) ?? 0;
 
             if (this.calculator.fieldDefinitions[this.definedField])
                 throw new Error(
                     `Field '${this.definedField}' is already defined!`,
                 );
-            else
-                this.calculator.fieldDefinitions[this.definedField] =
-                    computedValue;
 
-            // TODO: Reevaluate all expressions that used this expression
+            this.calculator.fieldDefinitions[this.definedField] = this;
+
+            // Reevaluate all expressions that used this variable
+            for (const user of this.usedBy) {
+                user.evaluate();
+            }
         } else {
             throw new Error("Too many equals signs!");
         }
 
-        this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(computedValue * 1e4) / 1e4}`;
+        this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e4) / 1e4}`;
     }
 }
 
 export class Calculator {
     expressionListElement: HTMLElement;
 
-    fieldDefinitions: { [key: string]: number } = {};
+    fieldDefinitions: { [key: string]: Expression } = {};
 
     constructor(expressionList: HTMLElement) {
         this.expressionListElement = expressionList;
