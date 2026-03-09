@@ -1,10 +1,31 @@
 import { Parser } from "./parser";
 
+export class CalculatorError extends Error {
+    constructor(message: string) {
+        super(message);
+    }
+}
+
+export type ErrorCallback = {
+    name: string;
+    callback: () => void;
+};
+
+export class LazyError extends CalculatorError {
+    options: ErrorCallback[] = [];
+    constructor(message: string, options: ErrorCallback[]) {
+        super(message);
+        this.options = options;
+    }
+}
+
 export class Expression {
     calculator: Calculator;
 
     element: HTMLElement;
     resultElement: HTMLElement;
+    errorWrapper: HTMLElement;
+    errorPopup: HTMLElement;
 
     expressionString: string;
     definedField: string | null = null;
@@ -27,7 +48,25 @@ export class Expression {
 
         this.resultElement = this.element.querySelector(".expression-result")!;
         if (this.resultElement === null)
-            throw new Error("Result element not found on expression template!");
+            throw new CalculatorError(
+                "Result element not found on expression template!",
+            );
+
+        this.errorWrapper = this.element.querySelector(
+            ".expression-error-wrapper",
+        )!;
+        if (this.errorWrapper === null)
+            throw new CalculatorError(
+                "Error element not found on expression template!",
+            );
+
+        this.errorPopup = this.element.querySelector(
+            ".expression-error-popup",
+        )!;
+        if (this.errorPopup === null)
+            throw new CalculatorError(
+                "Error popup not found on expression template!",
+            );
 
         // Add a listener to set the contents of the expression when it changes
         (this.element.querySelector(
@@ -35,6 +74,11 @@ export class Expression {
         ) as HTMLInputElement)!.onchange = (e) => {
             const target = e.target as HTMLInputElement;
             this.setContent(target.value);
+        };
+
+        // Add a listener for opening an error screen
+        this.errorWrapper.onclick = () => {
+            this.errorPopup.classList.toggle("hidden");
         };
 
         // Add a listener for removing the expression when the cross is clicked
@@ -50,44 +94,74 @@ export class Expression {
         this.evaluate();
     }
 
+    showError(errorText: string) {
+        this.errorWrapper.classList.remove("hidden");
+        this.resultElement.classList.add("hidden");
+        this.errorPopup.innerText = errorText;
+    }
+
+    hideError() {
+        this.errorWrapper.classList.add("hidden");
+        this.errorPopup.classList.add("hidden");
+        this.resultElement.classList.remove("hidden");
+    }
+
     setContent(newContent: string) {
         this.expressionString = newContent;
         this.evaluate();
     }
 
     evaluate() {
-        // Split into declaration and definition around an = sign (kinda yucky)
-        const parts = this.expressionString.split("=");
+        this.hideError();
 
-        if (parts.length === 1) {
-            // Simple expression
-            const parser = new Parser(parts[0]);
-            this.value = parser.evaluate(this) ?? 0;
-        } else if (parts.length === 2) {
-            delete this.calculator.fieldDefinitions[this.definedField ?? ""];
+        try {
+            // Split into declaration and definition around an = sign (kinda yucky)
+            const parts = this.expressionString.split("=");
 
-            // Field definition
-            const leftSide = parts[0].trim();
-            if (!leftSide.match(/^[A-Za-z]\w*$/g))
-                throw new Error(`Invalid variable name '${leftSide}'!`);
-            this.definedField = leftSide;
+            if (parts.length > 2)
+                throw new CalculatorError("Too many equals signs!");
 
-            const parser = new Parser(parts[1]);
-            this.value = parser.evaluate(this) ?? 0;
+            const isFieldDefinition = parts.length === 2;
+            const parser = new Parser(isFieldDefinition ? parts[1] : parts[0]);
+            this.value = parser.evaluate(this);
 
-            if (this.calculator.fieldDefinitions[this.definedField])
-                throw new Error(
-                    `Field '${this.definedField}' is already defined!`,
-                );
+            if (isFieldDefinition) {
+                delete this.calculator.fieldDefinitions[
+                    this.definedField ?? ""
+                ];
 
-            this.calculator.fieldDefinitions[this.definedField] = this;
+                // Field definition
+                const leftSide = parts[0].trim();
+                if (!leftSide.match(/^[A-Za-z]\w*$/g))
+                    throw new CalculatorError(
+                        `Invalid variable name '${leftSide}'!`,
+                    );
+                this.definedField = leftSide;
 
-            // Reevaluate all expressions that used this variable
-            for (const user of this.usedBy) {
-                user.evaluate();
+                if (this.calculator.fieldDefinitions[this.definedField])
+                    throw new CalculatorError(
+                        `Field '${this.definedField}' is already defined!`,
+                    );
+
+                this.calculator.fieldDefinitions[this.definedField] = this;
+
+                // Reevaluate all expressions that used this variable
+                for (const user of this.usedBy) {
+                    user.evaluate();
+                }
             }
-        } else {
-            throw new Error("Too many equals signs!");
+        } catch (e) {
+            if (e instanceof CalculatorError) {
+                // Set error text to message
+                this.showError("ERROR: " + e.message);
+                // If it's a LazyError, add the option buttons with associated callbacks
+                if (e instanceof LazyError) {
+                    // TODO
+                }
+            } else if (e instanceof Error) {
+                // Set error text to "INTERNAL ERROR: "+message
+                this.showError("INTERNAL ERROR: \n" + e.message);
+            }
         }
 
         this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e4) / 1e4}`;
@@ -117,6 +191,8 @@ export class Calculator {
     removeExpression(expression: Expression) {
         // Remove the element
         this.expressionListElement.removeChild(expression.element);
+        // Remove any field definitions from the expression
+        delete this.fieldDefinitions[expression.definedField ?? ""];
     }
 
     /**

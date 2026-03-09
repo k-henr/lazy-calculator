@@ -1,4 +1,4 @@
-import { Calculator, Expression } from "./calculator";
+import { CalculatorError, Expression, LazyError } from "./calculator";
 
 export class Parser {
     inputString: string;
@@ -13,7 +13,9 @@ export class Parser {
     expect(type: TokenType): Token {
         const token = this.pop()!;
         if (token.type !== type)
-            throw new Error(`Expected type ${type} but got ${token.type}!`);
+            throw new CalculatorError(
+                `Expected type ${type} but got ${token.type}!`,
+            );
         return token;
     }
 
@@ -23,7 +25,7 @@ export class Parser {
         this.inputString = inputString;
     }
 
-    evaluate(expression: Expression): number | null {
+    evaluate(expression: Expression): number {
         this.tokenize();
         this.buildTree();
         return this.evaluateTree(expression, this.astTree);
@@ -55,7 +57,9 @@ export class Parser {
                     tokens.unshift({ type, value: Number(groups[type]) });
                     break;
                 case "INVALID":
-                    throw new Error(`Invalid token '${groups[type]}'!`);
+                    throw new CalculatorError(
+                        `Invalid token '${groups[type]}'!`,
+                    );
                 default:
                     tokens.unshift({ type });
             }
@@ -69,7 +73,7 @@ export class Parser {
     // Convert to AST tree
     buildTree() {
         if (!this.tokens)
-            throw new Error(
+            throw new CalculatorError(
                 "Expression tried to parse before being tokenized!",
             );
 
@@ -98,7 +102,7 @@ export class Parser {
         // If the next token isn't RPAREN or END, the expression is malformed
         const t = this.peek().type;
         if (t !== "END" && t !== "RPAREN") {
-            throw new Error("Expected RPAREN or END but got " + t);
+            throw new CalculatorError("Expected RPAREN or END but got " + t);
         }
 
         return value1;
@@ -158,7 +162,7 @@ export class Parser {
             this.expect("RPAREN");
             return expr;
         }
-        throw new Error(`Unexpected token ${t.type}`);
+        throw new CalculatorError(`Unexpected token ${t.type}`);
     }
 
     evaluateTree(
@@ -169,7 +173,8 @@ export class Parser {
 
         if (typeof node === "string") {
             const dependency = expression.calculator.fieldDefinitions[node];
-            if (!dependency) throw new Error(`Couldn't find field '${node}'!`);
+            if (!dependency)
+                throw new CalculatorError(`Couldn't find field '${node}'!`);
 
             dependency.usedBy.add(expression);
             return dependency.value;
@@ -183,20 +188,65 @@ export class Parser {
         const v1 = this.evaluateTree(expression, node.value1);
         const v2 = this.evaluateTree(expression, node.value2);
 
+        const v1Len = String(v1).length;
+        const v2Len = String(v2).length;
+
         switch (node.operator) {
             case "ADD":
+                this.checkGiveUp(expression, 0.1 * Math.min(v1Len, v2Len), [
+                    "Adding big numbers is boring",
+                    "Couldn't you add those things instead?",
+                ]);
                 return v1 + v2;
+
             case "SUB":
+                this.checkGiveUp(expression, 0.15 * Math.min(v1Len, v2Len), [
+                    "Calculator doesn't like subtraction",
+                    "Too tired to figure out the carry rules",
+                ]);
                 return v1 - v2;
+
             case "DIV":
+                this.checkGiveUp(expression, 0.8 - 5 / (v2Len + 5), [
+                    "Division is difficult",
+                    "Which one's the numerator again?",
+                ]);
                 return v1 / v2;
+
             case "MUL":
+                this.checkGiveUp(expression, 0.05 * Math.max(v1Len, v2Len), [
+                    "Multiplication too difficult to do without pen and paper",
+                    "That's a lot of numbers to multiply",
+                ]);
                 return v1 * v2;
+
             case "EXP":
+                this.checkGiveUp(
+                    expression,
+                    0.2 * Math.max(0.75 * v1Len, v2Len),
+                    [
+                        "Exponents are too difficult",
+                        "Could you try to simplify it a bit?",
+                    ],
+                );
                 return Math.pow(v1, v2);
         }
 
         throw new Error("Unknown operator " + node.operator); // Something weird happened!
+    }
+
+    checkGiveUp(expression: Expression, chance: number, errorTexts: string[]) {
+        if (Math.random() < chance) {
+            throw new LazyError(
+                errorTexts[Math.floor(Math.random() * errorTexts.length)],
+                [
+                    {
+                        name: "Try again",
+                        callback: expression.evaluate,
+                    },
+                ],
+            );
+        }
     }
 }
 

@@ -12,7 +12,9 @@
     expect(type) {
       const token = this.pop();
       if (token.type !== type)
-        throw new Error(`Expected type ${type} but got ${token.type}!`);
+        throw new CalculatorError(
+          `Expected type ${type} but got ${token.type}!`
+        );
       return token;
     }
     astTree = 0;
@@ -45,7 +47,9 @@
             tokens.unshift({ type, value: Number(groups[type]) });
             break;
           case "INVALID":
-            throw new Error(`Invalid token '${groups[type]}'!`);
+            throw new CalculatorError(
+              `Invalid token '${groups[type]}'!`
+            );
           default:
             tokens.unshift({ type });
         }
@@ -56,7 +60,7 @@
     // Convert to AST tree
     buildTree() {
       if (!this.tokens)
-        throw new Error(
+        throw new CalculatorError(
           "Expression tried to parse before being tokenized!"
         );
       if (this.peek().type === "END") {
@@ -79,7 +83,7 @@
       }
       const t = this.peek().type;
       if (t !== "END" && t !== "RPAREN") {
-        throw new Error("Expected RPAREN or END but got " + t);
+        throw new CalculatorError("Expected RPAREN or END but got " + t);
       }
       return value1;
     }
@@ -132,13 +136,14 @@
         this.expect("RPAREN");
         return expr;
       }
-      throw new Error(`Unexpected token ${t.type}`);
+      throw new CalculatorError(`Unexpected token ${t.type}`);
     }
     evaluateTree(expression, node) {
       if (node === void 0) return 0;
       if (typeof node === "string") {
         const dependency = expression.calculator.fieldDefinitions[node];
-        if (!dependency) throw new Error(`Couldn't find field '${node}'!`);
+        if (!dependency)
+          throw new CalculatorError(`Couldn't find field '${node}'!`);
         dependency.usedBy.add(expression);
         return dependency.value;
       }
@@ -148,19 +153,58 @@
       node = node;
       const v1 = this.evaluateTree(expression, node.value1);
       const v2 = this.evaluateTree(expression, node.value2);
+      const v1Len = String(v1).length;
+      const v2Len = String(v2).length;
       switch (node.operator) {
         case "ADD":
+          this.checkGiveUp(expression, 0.1 * Math.min(v1Len, v2Len), [
+            "Adding big numbers is boring",
+            "Couldn't you add those things instead?"
+          ]);
           return v1 + v2;
         case "SUB":
+          this.checkGiveUp(expression, 0.15 * Math.min(v1Len, v2Len), [
+            "Calculator doesn't like subtraction",
+            "Too tired to figure out the carry rules"
+          ]);
           return v1 - v2;
         case "DIV":
+          this.checkGiveUp(expression, 0.8 - 5 / (v2Len + 5), [
+            "Division is difficult",
+            "Which one's the numerator again?"
+          ]);
           return v1 / v2;
         case "MUL":
+          this.checkGiveUp(expression, 0.05 * Math.max(v1Len, v2Len), [
+            "Multiplication too difficult to do without pen and paper",
+            "That's a lot of numbers to multiply"
+          ]);
           return v1 * v2;
         case "EXP":
+          this.checkGiveUp(
+            expression,
+            0.2 * Math.max(0.75 * v1Len, v2Len),
+            [
+              "Exponents are too difficult",
+              "Could you try to simplify it a bit?"
+            ]
+          );
           return Math.pow(v1, v2);
       }
       throw new Error("Unknown operator " + node.operator);
+    }
+    checkGiveUp(expression, chance, errorTexts) {
+      if (Math.random() < chance) {
+        throw new LazyError(
+          errorTexts[Math.floor(Math.random() * errorTexts.length)],
+          [
+            {
+              name: "Try again",
+              callback: expression.evaluate
+            }
+          ]
+        );
+      }
     }
   };
   var tokenPatterns = [
@@ -181,10 +225,24 @@
   );
 
   // calculator.ts
-  var Expression = class {
+  var CalculatorError = class extends Error {
+    constructor(message) {
+      super(message);
+    }
+  };
+  var LazyError = class extends CalculatorError {
+    options = [];
+    constructor(message, options) {
+      super(message);
+      this.options = options;
+    }
+  };
+  var Expression2 = class {
     calculator;
     element;
     resultElement;
+    errorWrapper;
+    errorPopup;
     expressionString;
     definedField = null;
     value;
@@ -199,12 +257,31 @@
       this.element = this.template.content.cloneNode(true).querySelector(".expression");
       this.resultElement = this.element.querySelector(".expression-result");
       if (this.resultElement === null)
-        throw new Error("Result element not found on expression template!");
+        throw new CalculatorError(
+          "Result element not found on expression template!"
+        );
+      this.errorWrapper = this.element.querySelector(
+        ".expression-error-wrapper"
+      );
+      if (this.errorWrapper === null)
+        throw new CalculatorError(
+          "Error element not found on expression template!"
+        );
+      this.errorPopup = this.element.querySelector(
+        ".expression-error-popup"
+      );
+      if (this.errorPopup === null)
+        throw new CalculatorError(
+          "Error popup not found on expression template!"
+        );
       this.element.querySelector(
         ".expression-edit-field"
       ).onchange = (e) => {
         const target = e.target;
         this.setContent(target.value);
+      };
+      this.errorWrapper.onclick = () => {
+        this.errorPopup.classList.toggle("hidden");
       };
       this.element.querySelector(
         ".remove-expression"
@@ -214,33 +291,54 @@
       calculator2.expressionListElement.appendChild(this.element);
       this.evaluate();
     }
+    showError(errorText) {
+      this.errorWrapper.classList.remove("hidden");
+      this.resultElement.classList.add("hidden");
+      this.errorPopup.innerText = errorText;
+    }
+    hideError() {
+      this.errorWrapper.classList.add("hidden");
+      this.errorPopup.classList.add("hidden");
+      this.resultElement.classList.remove("hidden");
+    }
     setContent(newContent) {
       this.expressionString = newContent;
       this.evaluate();
     }
     evaluate() {
-      const parts = this.expressionString.split("=");
-      if (parts.length === 1) {
-        const parser = new Parser(parts[0]);
-        this.value = parser.evaluate(this) ?? 0;
-      } else if (parts.length === 2) {
-        delete this.calculator.fieldDefinitions[this.definedField ?? ""];
-        const leftSide = parts[0].trim();
-        if (!leftSide.match(/^[A-Za-z]\w*$/g))
-          throw new Error(`Invalid variable name '${leftSide}'!`);
-        this.definedField = leftSide;
-        const parser = new Parser(parts[1]);
-        this.value = parser.evaluate(this) ?? 0;
-        if (this.calculator.fieldDefinitions[this.definedField])
-          throw new Error(
-            `Field '${this.definedField}' is already defined!`
-          );
-        this.calculator.fieldDefinitions[this.definedField] = this;
-        for (const user of this.usedBy) {
-          user.evaluate();
+      this.hideError();
+      try {
+        const parts = this.expressionString.split("=");
+        if (parts.length > 2)
+          throw new CalculatorError("Too many equals signs!");
+        const isFieldDefinition = parts.length === 2;
+        const parser = new Parser(isFieldDefinition ? parts[1] : parts[0]);
+        this.value = parser.evaluate(this);
+        if (isFieldDefinition) {
+          delete this.calculator.fieldDefinitions[this.definedField ?? ""];
+          const leftSide = parts[0].trim();
+          if (!leftSide.match(/^[A-Za-z]\w*$/g))
+            throw new CalculatorError(
+              `Invalid variable name '${leftSide}'!`
+            );
+          this.definedField = leftSide;
+          if (this.calculator.fieldDefinitions[this.definedField])
+            throw new CalculatorError(
+              `Field '${this.definedField}' is already defined!`
+            );
+          this.calculator.fieldDefinitions[this.definedField] = this;
+          for (const user of this.usedBy) {
+            user.evaluate();
+          }
         }
-      } else {
-        throw new Error("Too many equals signs!");
+      } catch (e) {
+        if (e instanceof CalculatorError) {
+          this.showError("ERROR: " + e.message);
+          if (e instanceof LazyError) {
+          }
+        } else if (e instanceof Error) {
+          this.showError("INTERNAL ERROR: \n" + e.message);
+        }
       }
       this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e4) / 1e4}`;
     }
@@ -255,7 +353,7 @@
      * Add a new, empty expression to this calculator.
      */
     addExpression() {
-      const expression = new Expression(this, "");
+      const expression = new Expression2(this, "");
     }
     /**
      * Remove the given expression.
@@ -263,6 +361,7 @@
      */
     removeExpression(expression) {
       this.expressionListElement.removeChild(expression.element);
+      delete this.fieldDefinitions[expression.definedField ?? ""];
     }
     /**
      * Set the content of the given expression to something new.

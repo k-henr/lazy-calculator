@@ -19,6 +19,12 @@
     <template id="expression-template">
         <div class="expression">
             <input class="expression-edit-field" type="text" />
+            <div class="expression-error-wrapper hidden">
+                <img class="expression-error" src="/icons/error.svg" />
+                <div class="expression-error-popup hidden">
+                    INTERNAL ERROR: fail
+                </div>
+            </div>
             <div class="expression-result"></div>
             <img class="remove-expression" src="/icons/cross.svg" />
         </div>

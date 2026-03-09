@@ -50,10 +50,35 @@ body {
     border: none;
 }
 
-.expression > .remove-expression {
+.remove-expression {
     cursor: pointer;
     height: 32px;
     margin: 8px;
+}
+
+.expression-error-wrapper {
+    position: relative;
+    height: 48px;
+}
+
+.expression-error {
+    height: 32px;
+    margin: 8px;
+}
+
+.expression-error-popup {
+    position: absolute;
+    top: calc(90%);
+    left: calc(50%);
+    transform: translateX(-50%);
+    z-index: 1;
+
+    width: 240px;
+
+    background-color: lightcoral;
+    padding: 4px;
+
+    border: 1px solid black;
 }
 
 #expression-adder {
@@ -61,4 +86,8 @@ body {
 }
 #expression-adder > img {
     height: 32px;
+}
+
+.hidden {
+    display: none;
 }
