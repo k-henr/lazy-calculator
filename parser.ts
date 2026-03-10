@@ -180,7 +180,6 @@ export class Parser {
             return dependency.value;
         }
         if (typeof node === "number") {
-            // not being caught
             return Number(node);
         }
         node = node as AstTreeNode;
@@ -193,40 +192,50 @@ export class Parser {
 
         switch (node.operator) {
             case "ADD":
-                this.checkGiveUp(expression, 0.1 * Math.min(v1Len, v2Len), [
-                    "Adding big numbers is boring",
-                    "Couldn't you add those things instead?",
-                ]);
+                this.checkGiveUp(
+                    expression,
+                    0.2 * Math.min(v1Len + 0.1 * v2Len, v2Len + 0.1 * v1Len),
+                    [
+                        "Adding big numbers is boring",
+                        "Couldn't you add those things instead?",
+                        "Forgot how addition works",
+                    ],
+                );
                 return v1 + v2;
 
             case "SUB":
-                this.checkGiveUp(expression, 0.15 * Math.min(v1Len, v2Len), [
+                this.checkGiveUp(expression, 0.4 * Math.min(v1Len, v2Len), [
                     "Calculator doesn't like subtraction",
                     "Too tired to figure out the carry rules",
+                    "Scared of negative numbers",
                 ]);
                 return v1 - v2;
 
             case "DIV":
-                this.checkGiveUp(expression, 0.8 - 5 / (v2Len + 5), [
+                this.checkGiveUp(expression, 0.5 * v2Len, [
                     "Division is difficult",
-                    "Which one's the numerator again?",
+                    "Forgot which one was the numerator",
+                    "Doesn't want to risk infinite decimals",
+                    "Too tired to try long division",
                 ]);
                 return v1 / v2;
 
             case "MUL":
-                this.checkGiveUp(expression, 0.05 * Math.max(v1Len, v2Len), [
+                this.checkGiveUp(expression, 0.5 * Math.max(v1Len, v2Len), [
                     "Multiplication too difficult to do without pen and paper",
                     "That's a lot of numbers to multiply",
+                    "Calculator isn't sure how lattice multiplication works; Scared of doing it wrong",
                 ]);
                 return v1 * v2;
 
             case "EXP":
                 this.checkGiveUp(
                     expression,
-                    0.2 * Math.max(0.75 * v1Len, v2Len),
+                    0.8 * Math.max(0.75 * v1Len, v2Len - 1),
                     [
                         "Exponents are too difficult",
-                        "Could you try to simplify it a bit?",
+                        "Could you try to simplify the exponent a bit?",
+                        "Calculator last did powers in high school; never practiced since",
                     ],
                 );
                 return Math.pow(v1, v2);
@@ -236,13 +245,37 @@ export class Parser {
     }
 
     checkGiveUp(expression: Expression, chance: number, errorTexts: string[]) {
-        if (Math.random() < chance) {
+        if (Math.random() < chance * expression.complexityMultiplier) {
+            const buttonContents = [
+                "Try again!",
+                "You can do this!",
+                "Keep trying!",
+                "Keep going!",
+            ];
+
+            const universalComplaints = [
+                "Do I really need to do this?",
+                "Calculator zoned out",
+                "Calculator is tired today",
+                "Maths is hard",
+                "When will you ever use this in real life?",
+            ];
+
+            const combinedErrorTexts = universalComplaints.concat(errorTexts);
+
             throw new LazyError(
-                errorTexts[Math.floor(Math.random() * errorTexts.length)],
+                combinedErrorTexts[
+                    Math.floor(Math.random() * combinedErrorTexts.length)
+                ],
                 [
                     {
-                        name: "Try again",
-                        callback: expression.evaluate,
+                        name: buttonContents[
+                            Math.floor(Math.random() * buttonContents.length)
+                        ],
+                        callback: () => {
+                            expression.complexityMultiplier *= 0.75;
+                            expression.evaluate();
+                        },
                     },
                 ],
             );

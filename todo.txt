@@ -1,10 +1,6 @@
 - Make it lazy
-    * Add button support to the error popup
-    * Add a "retry" button on LazyErrors that retries, but with a slightly larger 
-        tolerance for complexity
-    * Make it calculate wrong sometimes? Would probably need a warning "Not sure
-        this result is correct"
-    * Make it complain about complex expressions in the tree parsing step
+    * Add lots more lazy error messages
 - Functions?
     * Redo the defuledFields thing as a CalculatorContext type to allow for defining
         arguments (in a new, local context added on top of the calculator's one)
+- Put up on GHP

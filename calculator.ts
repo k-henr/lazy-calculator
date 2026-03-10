@@ -31,10 +31,17 @@ export class Expression {
     definedField: string | null = null;
     value: number;
 
+    // Gradually lowers when retrying
+    complexityMultiplier = 1;
+
     usedBy: Set<Expression> = new Set();
 
-    template = document.getElementById(
-        "expression-template",
+    template = document.querySelector(
+        "#expression-template",
+    ) as HTMLTemplateElement;
+
+    errorButtonTemplate = document.querySelector(
+        "#error-button-template",
     ) as HTMLTemplateElement;
 
     constructor(calculator: Calculator, expressionString: string) {
@@ -94,43 +101,50 @@ export class Expression {
         this.evaluate();
     }
 
-    showError(errorText: string) {
+    showError = (errorText: string) => {
         this.errorWrapper.classList.remove("hidden");
         this.resultElement.classList.add("hidden");
         this.errorPopup.innerText = errorText;
-    }
+    };
 
-    hideError() {
+    hideError = () => {
         this.errorWrapper.classList.add("hidden");
         this.errorPopup.classList.add("hidden");
+        this.errorPopup.innerHTML = "";
         this.resultElement.classList.remove("hidden");
-    }
+    };
 
-    setContent(newContent: string) {
+    setContent = (newContent: string) => {
         this.expressionString = newContent;
         this.evaluate();
-    }
+    };
 
-    evaluate() {
+    evaluate = () => {
         this.hideError();
 
         try {
             // Split into declaration and definition around an = sign (kinda yucky)
             const parts = this.expressionString.split("=");
 
+            // todo: prep support for conditionals by using a regex matcher instead
             if (parts.length > 2)
                 throw new CalculatorError("Too many equals signs!");
 
-            const isFieldDefinition = parts.length === 2;
+            const isFieldDefinition = parts.length === 2; // yucky code. Fix!
+
             const parser = new Parser(isFieldDefinition ? parts[1] : parts[0]);
             this.value = parser.evaluate(this);
 
-            if (isFieldDefinition) {
-                delete this.calculator.fieldDefinitions[
-                    this.definedField ?? ""
-                ];
+            // Reset complexity multiplier if parse succeeded
+            this.complexityMultiplier = 1;
 
-                // Field definition
+            if (isFieldDefinition) {
+                // Delete the old definition, if there is one
+                if (this.definedField) {
+                    delete this.calculator.fieldDefinitions[this.definedField];
+                }
+
+                // Get the defined field
                 const leftSide = parts[0].trim();
                 if (!leftSide.match(/^[A-Za-z]\w*$/g))
                     throw new CalculatorError(
@@ -154,9 +168,24 @@ export class Expression {
             if (e instanceof CalculatorError) {
                 // Set error text to message
                 this.showError("ERROR: " + e.message);
+
                 // If it's a LazyError, add the option buttons with associated callbacks
                 if (e instanceof LazyError) {
-                    // TODO
+                    // Add response buttons
+                    for (const option of e.options) {
+                        // Create a new button
+                        const button =
+                            this.errorButtonTemplate.content.cloneNode(
+                                true,
+                            ) as HTMLElement;
+
+                        const buttonElement =
+                            button.firstElementChild as HTMLElement;
+                        buttonElement.setAttribute("value", option.name);
+                        buttonElement.onclick = option.callback;
+
+                        this.errorPopup.appendChild(button);
+                    }
                 }
             } else if (e instanceof Error) {
                 // Set error text to "INTERNAL ERROR: "+message
@@ -164,8 +193,9 @@ export class Expression {
             }
         }
 
-        this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e4) / 1e4}`;
-    }
+        // TODO: Smarter rounding with significant digits
+        this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e6) / 1e6}`;
+    };
 }
 
 export class Calculator {
