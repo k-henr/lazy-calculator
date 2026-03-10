@@ -1,6 +1,15 @@
-- Make it lazy
-    * Add lots more lazy error messages
-- Functions?
-    * Redo the defuledFields thing as a CalculatorContext type to allow for defining
-        arguments (in a new, local context added on top of the calculator's one)
+- Functions
+    * Add a setDisplayVisibility(resultVisible, errorVisible) function
+    * Check for functions in the preEval matcher. If it's a function, don't evaluate
+        it and mark the expression as a function (add an ExpressionType type?)
+    * Make the CalculatorContext of a parser be passed in a list to the function
+    * Add FUN as type in the parser for function calls and as an AstNodeType. When
+        constructing the AST tree, store the function arguments (as strings, don't
+        evaluate yet) in the node
+    * When hitting a FUN node, make a new CalculatorContext, parse and evaluate the
+        arguments (which can throw their own errors), then parse the expression that
+        the FUN node points to with this context added in the list
+- Add a scrollbox around the expression list, automatically scroll to bottom when
+    adding an expression
+- Make the introduction collapsible
 - Put up on GHP

@@ -172,7 +172,8 @@ export class Parser {
         if (node === undefined) return 0;
 
         if (typeof node === "string") {
-            const dependency = expression.calculator.fieldDefinitions[node];
+            const dependency =
+                expression.calculator.globalContext.tryGetField(node);
             if (!dependency)
                 throw new CalculatorError(`Couldn't find field '${node}'!`);
 
@@ -231,7 +232,7 @@ export class Parser {
             case "EXP":
                 this.checkGiveUp(
                     expression,
-                    0.8 * Math.max(0.75 * v1Len, v2Len - 1),
+                    0.8 * Math.max(0.75 * v1Len, (v2Len - 1) * v2Len),
                     [
                         "Exponents are too difficult",
                         "Could you try to simplify the exponent a bit?",

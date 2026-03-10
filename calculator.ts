@@ -19,6 +19,22 @@ export class LazyError extends CalculatorError {
     }
 }
 
+class CalculatorContext {
+    fields: { [key: string]: Expression } = {};
+
+    addField = (name: string, expression: Expression) => {
+        this.fields[name] = expression;
+    };
+
+    removeField = (name: string) => {
+        delete this.fields[name];
+    };
+
+    tryGetField = (name: string): Expression | null => {
+        return this.fields[name];
+    };
+}
+
 export class Expression {
     calculator: Calculator;
 
@@ -123,47 +139,59 @@ export class Expression {
         this.hideError();
 
         try {
-            // Split into declaration and definition around an = sign (kinda yucky)
-            const parts = this.expressionString.split("=");
+            // Figure out if it's a field definition or not
+            const preEvalMatch = this.expressionString.match(
+                /^\s*(?<fieldName>[A-Za-z\d]\w*)\s*=(?<fieldContent>.*)/,
+            );
 
+            // Split into declaration and definition around an = sign (yucky code!)
             // todo: prep support for conditionals by using a regex matcher instead
+            const parts = this.expressionString.split("=");
             if (parts.length > 2)
                 throw new CalculatorError("Too many equals signs!");
 
-            const isFieldDefinition = parts.length === 2; // yucky code. Fix!
+            if (preEvalMatch) {
+                if (!preEvalMatch.groups)
+                    throw new Error("Error during parsing field declaration!");
 
-            const parser = new Parser(isFieldDefinition ? parts[1] : parts[0]);
-            this.value = parser.evaluate(this);
+                const { groups } = preEvalMatch;
 
-            // Reset complexity multiplier if parse succeeded
-            this.complexityMultiplier = 1;
+                // Field definition
+                const parser = new Parser(groups.fieldContent);
+                this.value = parser.evaluate(this);
 
-            if (isFieldDefinition) {
                 // Delete the old definition, if there is one
                 if (this.definedField) {
-                    delete this.calculator.fieldDefinitions[this.definedField];
+                    this.calculator.globalContext.removeField(
+                        this.definedField,
+                    );
                 }
 
                 // Get the defined field
-                const leftSide = parts[0].trim();
-                if (!leftSide.match(/^[A-Za-z]\w*$/g))
-                    throw new CalculatorError(
-                        `Invalid variable name '${leftSide}'!`,
-                    );
-                this.definedField = leftSide;
+                this.definedField = groups.fieldName;
 
-                if (this.calculator.fieldDefinitions[this.definedField])
+                if (
+                    this.calculator.globalContext.tryGetField(this.definedField)
+                ) {
+                    this.definedField = null;
                     throw new CalculatorError(
                         `Field '${this.definedField}' is already defined!`,
                     );
+                }
 
-                this.calculator.fieldDefinitions[this.definedField] = this;
+                this.calculator.globalContext.addField(this.definedField, this);
 
                 // Reevaluate all expressions that used this variable
                 for (const user of this.usedBy) {
                     user.evaluate();
                 }
+            } else {
+                const parser = new Parser(this.expressionString);
+                this.value = parser.evaluate(this);
             }
+
+            // Reset complexity multiplier if parse succeeded
+            this.complexityMultiplier = 1;
         } catch (e) {
             if (e instanceof CalculatorError) {
                 // Set error text to message
@@ -201,7 +229,9 @@ export class Expression {
 export class Calculator {
     expressionListElement: HTMLElement;
 
-    fieldDefinitions: { [key: string]: Expression } = {};
+    // fieldDefinitions: { [key: string]: Expression } = {};
+
+    globalContext: CalculatorContext = new CalculatorContext();
 
     constructor(expressionList: HTMLElement) {
         this.expressionListElement = expressionList;
@@ -221,8 +251,12 @@ export class Calculator {
     removeExpression(expression: Expression) {
         // Remove the element
         this.expressionListElement.removeChild(expression.element);
+
         // Remove any field definitions from the expression
-        delete this.fieldDefinitions[expression.definedField ?? ""];
+        const definedField = expression.definedField;
+        if (definedField) {
+            this.globalContext.removeField(definedField);
+        }
     }
 
     /**
@@ -235,7 +269,7 @@ export class Calculator {
 
         // Clear the defined field if there is one
         if (definedField) {
-            delete this.fieldDefinitions[definedField];
+            this.globalContext.removeField(definedField);
         }
 
         expression.setContent(newValue);

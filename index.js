@@ -141,7 +141,7 @@
     evaluateTree(expression, node) {
       if (node === void 0) return 0;
       if (typeof node === "string") {
-        const dependency = expression.calculator.fieldDefinitions[node];
+        const dependency = expression.calculator.globalContext.tryGetField(node);
         if (!dependency)
           throw new CalculatorError(`Couldn't find field '${node}'!`);
         dependency.usedBy.add(expression);
@@ -192,7 +192,7 @@
         case "EXP":
           this.checkGiveUp(
             expression,
-            0.8 * Math.max(0.75 * v1Len, v2Len - 1),
+            0.8 * Math.max(0.75 * v1Len, (v2Len - 1) * v2Len),
             [
               "Exponents are too difficult",
               "Could you try to simplify the exponent a bit?",
@@ -263,6 +263,18 @@
       super(message);
       this.options = options;
     }
+  };
+  var CalculatorContext = class {
+    fields = {};
+    addField = (name, expression) => {
+      this.fields[name] = expression;
+    };
+    removeField = (name) => {
+      delete this.fields[name];
+    };
+    tryGetField = (name) => {
+      return this.fields[name];
+    };
   };
   var Expression2 = class {
     calculator;
@@ -341,32 +353,39 @@
     evaluate = () => {
       this.hideError();
       try {
+        const preEvalMatch = this.expressionString.match(
+          /^\s*(?<fieldName>[A-Za-z\d]\w*)\s*=(?<fieldContent>.*)/
+        );
         const parts = this.expressionString.split("=");
         if (parts.length > 2)
           throw new CalculatorError("Too many equals signs!");
-        const isFieldDefinition = parts.length === 2;
-        const parser = new Parser(isFieldDefinition ? parts[1] : parts[0]);
-        this.value = parser.evaluate(this);
-        this.complexityMultiplier = 1;
-        if (isFieldDefinition) {
+        if (preEvalMatch) {
+          if (!preEvalMatch.groups)
+            throw new Error("Error during parsing field declaration!");
+          const { groups } = preEvalMatch;
+          const parser = new Parser(groups.fieldContent);
+          this.value = parser.evaluate(this);
           if (this.definedField) {
-            delete this.calculator.fieldDefinitions[this.definedField];
-          }
-          const leftSide = parts[0].trim();
-          if (!leftSide.match(/^[A-Za-z]\w*$/g))
-            throw new CalculatorError(
-              `Invalid variable name '${leftSide}'!`
+            this.calculator.globalContext.removeField(
+              this.definedField
             );
-          this.definedField = leftSide;
-          if (this.calculator.fieldDefinitions[this.definedField])
+          }
+          this.definedField = groups.fieldName;
+          if (this.calculator.globalContext.tryGetField(this.definedField)) {
+            this.definedField = null;
             throw new CalculatorError(
               `Field '${this.definedField}' is already defined!`
             );
-          this.calculator.fieldDefinitions[this.definedField] = this;
+          }
+          this.calculator.globalContext.addField(this.definedField, this);
           for (const user of this.usedBy) {
             user.evaluate();
           }
+        } else {
+          const parser = new Parser(this.expressionString);
+          this.value = parser.evaluate(this);
         }
+        this.complexityMultiplier = 1;
       } catch (e) {
         if (e instanceof CalculatorError) {
           this.showError("ERROR: " + e.message);
@@ -390,7 +409,8 @@
   };
   var Calculator = class {
     expressionListElement;
-    fieldDefinitions = {};
+    // fieldDefinitions: { [key: string]: Expression } = {};
+    globalContext = new CalculatorContext();
     constructor(expressionList2) {
       this.expressionListElement = expressionList2;
     }
@@ -406,7 +426,10 @@
      */
     removeExpression(expression) {
       this.expressionListElement.removeChild(expression.element);
-      delete this.fieldDefinitions[expression.definedField ?? ""];
+      const definedField = expression.definedField;
+      if (definedField) {
+        this.globalContext.removeField(definedField);
+      }
     }
     /**
      * Set the content of the given expression to something new.
@@ -416,7 +439,7 @@
     setExpressionContent(expression, newValue) {
       const definedField = expression.definedField;
       if (definedField) {
-        delete this.fieldDefinitions[definedField];
+        this.globalContext.removeField(definedField);
       }
       expression.setContent(newValue);
     }
