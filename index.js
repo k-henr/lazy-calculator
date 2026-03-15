@@ -141,7 +141,7 @@
     evaluateTree(expression, node) {
       if (node === void 0) return 0;
       if (typeof node === "string") {
-        const dependency = expression.calculator.globalContext.tryGetField(node);
+        const dependency = expression.calculator.globalContext.tryGetVariable(node);
         if (!dependency)
           throw new CalculatorError(`Couldn't find field '${node}'!`);
         dependency.usedBy.add(expression);
@@ -216,7 +216,9 @@
           "Calculator zoned out",
           "Calculator is tired today",
           "Maths is hard",
-          "When will you ever use this in real life?"
+          "When will you ever use this in real life?",
+          "Calculator too tired",
+          "Calculator couldn't be bothered"
         ];
         const combinedErrorTexts = universalComplaints.concat(errorTexts);
         throw new LazyError(
@@ -265,15 +267,16 @@
     }
   };
   var CalculatorContext = class {
-    fields = {};
+    variables = {};
+    functions = {};
     addField = (name, expression) => {
-      this.fields[name] = expression;
+      this.variables[name] = expression;
     };
     removeField = (name) => {
-      delete this.fields[name];
+      delete this.variables[name];
     };
-    tryGetField = (name) => {
-      return this.fields[name];
+    tryGetVariable = (name) => {
+      return this.variables[name];
     };
   };
   var Expression2 = class {
@@ -282,8 +285,14 @@
     resultElement;
     errorWrapper;
     errorPopup;
+    definedFunction = null;
+    arguments = [];
+    // Stores function arguments if this is a function. Kinda yucky
+    fnDef = "";
+    // Stores the function definition if this is a function. See above ^
+    definedVariable = null;
     expressionString;
-    definedField = null;
+    // Stores the full string of this expression, including declarations
     value;
     // Gradually lowers when retrying
     complexityMultiplier = 1;
@@ -337,14 +346,22 @@
     }
     showError = (errorText) => {
       this.errorWrapper.classList.remove("hidden");
-      this.resultElement.classList.add("hidden");
       this.errorPopup.innerText = errorText;
     };
     hideError = () => {
       this.errorWrapper.classList.add("hidden");
       this.errorPopup.classList.add("hidden");
       this.errorPopup.innerHTML = "";
+    };
+    showResult = (resultText) => {
+      this.resultElement.innerText = resultText;
       this.resultElement.classList.remove("hidden");
+    };
+    hideResult = () => {
+      this.resultElement.classList.add("hidden");
+    };
+    getRoundedString = (x) => {
+      return String(Math.round(x * 1e6) / 1e6);
     };
     setContent = (newContent) => {
       this.expressionString = newContent;
@@ -352,38 +369,55 @@
     };
     evaluate = () => {
       this.hideError();
+      this.hideResult();
       try {
-        const preEvalMatch = this.expressionString.match(
-          /^\s*(?<fieldName>[A-Za-z\d]\w*)\s*=(?<fieldContent>.*)/
-        );
-        const parts = this.expressionString.split("=");
-        if (parts.length > 2)
-          throw new CalculatorError("Too many equals signs!");
-        if (preEvalMatch) {
-          if (!preEvalMatch.groups)
-            throw new Error("Error during parsing field declaration!");
-          const { groups } = preEvalMatch;
-          const parser = new Parser(groups.fieldContent);
-          this.value = parser.evaluate(this);
-          if (this.definedField) {
-            this.calculator.globalContext.removeField(
-              this.definedField
+        const typeMatcher = /^\s*(?<VRNAME>[a-z]\w*)\s*=\s*(?<VRDEF>.*)$|^\s*(?<FNNAME>[a-z]\w*)\s*\(\s*(?<FNARGS>(?:[a-z]\w*(?:\s*,\s*[a-z]\w*\s*)*)?)\s*\)\s*=\s*(?<FNDEF>.*)/im;
+        const typeMatch = this.expressionString.match(typeMatcher);
+        console.log(typeMatch);
+        if (typeMatch) {
+          if (!typeMatch.groups)
+            throw new Error("Pre-evaluation regex match failed!");
+          const { groups } = typeMatch;
+          if (this.definedVariable) {
+            delete this.calculator.globalContext.variables[this.definedVariable];
+          } else if (this.definedFunction) {
+            delete this.calculator.globalContext.functions[this.definedFunction];
+          }
+          if (groups.FNNAME) {
+            const fns = this.calculator.globalContext.functions;
+            if (fns[groups.FNNAME]) {
+              throw new CalculatorError(
+                `Function "${groups.FNNAME}" is already defined!`
+              );
+            }
+            fns[groups.FNNAME] = this;
+            this.definedFunction = groups.FNNAME;
+            this.arguments = groups.FNARGS.split(",").map(
+              (e) => e.trim()
+            );
+            this.fnDef = groups.FNDEF;
+          } else {
+            const vars = this.calculator.globalContext.variables;
+            if (vars[groups.VRNAME]) {
+              throw new CalculatorError(
+                `Variable ${groups.VRNAME} is already defined!`
+              );
+            }
+            vars[groups.VRNAME] = this;
+            this.definedVariable = groups.VRNAME;
+            const parser = new Parser(groups.VRDEF);
+            this.value = parser.evaluate(this);
+            this.showResult(
+              `${this.definedVariable} = ${this.getRoundedString(this.value)}`
             );
           }
-          this.definedField = groups.fieldName;
-          if (this.calculator.globalContext.tryGetField(this.definedField)) {
-            this.definedField = null;
-            throw new CalculatorError(
-              `Field '${this.definedField}' is already defined!`
-            );
-          }
-          this.calculator.globalContext.addField(this.definedField, this);
           for (const user of this.usedBy) {
             user.evaluate();
           }
         } else {
           const parser = new Parser(this.expressionString);
           this.value = parser.evaluate(this);
+          this.showResult(this.getRoundedString(this.value));
         }
         this.complexityMultiplier = 1;
       } catch (e) {
@@ -404,7 +438,6 @@
           this.showError("INTERNAL ERROR: \n" + e.message);
         }
       }
-      this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e6) / 1e6}`;
     };
   };
   var Calculator = class {
@@ -426,7 +459,7 @@
      */
     removeExpression(expression) {
       this.expressionListElement.removeChild(expression.element);
-      const definedField = expression.definedField;
+      const definedField = expression.definedVariable;
       if (definedField) {
         this.globalContext.removeField(definedField);
       }
@@ -437,7 +470,7 @@
      * @param newValue The new content of this expression
      */
     setExpressionContent(expression, newValue) {
-      const definedField = expression.definedField;
+      const definedField = expression.definedVariable;
       if (definedField) {
         this.globalContext.removeField(definedField);
       }

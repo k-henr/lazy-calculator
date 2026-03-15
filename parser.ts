@@ -173,7 +173,7 @@ export class Parser {
 
         if (typeof node === "string") {
             const dependency =
-                expression.calculator.globalContext.tryGetField(node);
+                expression.calculator.globalContext.tryGetVariable(node);
             if (!dependency)
                 throw new CalculatorError(`Couldn't find field '${node}'!`);
 
@@ -260,6 +260,8 @@ export class Parser {
                 "Calculator is tired today",
                 "Maths is hard",
                 "When will you ever use this in real life?",
+                "Calculator too tired",
+                "Calculator couldn't be bothered",
             ];
 
             const combinedErrorTexts = universalComplaints.concat(errorTexts);

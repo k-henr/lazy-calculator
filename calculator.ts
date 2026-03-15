@@ -20,18 +20,19 @@ export class LazyError extends CalculatorError {
 }
 
 class CalculatorContext {
-    fields: { [key: string]: Expression } = {};
+    variables: { [key: string]: Expression } = {};
+    functions: { [key: string]: Expression } = {};
 
     addField = (name: string, expression: Expression) => {
-        this.fields[name] = expression;
+        this.variables[name] = expression;
     };
 
     removeField = (name: string) => {
-        delete this.fields[name];
+        delete this.variables[name];
     };
 
-    tryGetField = (name: string): Expression | null => {
-        return this.fields[name];
+    tryGetVariable = (name: string): Expression | null => {
+        return this.variables[name];
     };
 }
 
@@ -43,8 +44,13 @@ export class Expression {
     errorWrapper: HTMLElement;
     errorPopup: HTMLElement;
 
-    expressionString: string;
-    definedField: string | null = null;
+    definedFunction: string | null = null;
+    arguments: string[] = []; // Stores function arguments if this is a function. Kinda yucky
+    fnDef: string = ""; // Stores the function definition if this is a function. See above ^
+
+    definedVariable: string | null = null;
+
+    expressionString: string; // Stores the full string of this expression, including declarations
     value: number;
 
     // Gradually lowers when retrying
@@ -119,7 +125,6 @@ export class Expression {
 
     showError = (errorText: string) => {
         this.errorWrapper.classList.remove("hidden");
-        this.resultElement.classList.add("hidden");
         this.errorPopup.innerText = errorText;
     };
 
@@ -127,7 +132,20 @@ export class Expression {
         this.errorWrapper.classList.add("hidden");
         this.errorPopup.classList.add("hidden");
         this.errorPopup.innerHTML = "";
+    };
+
+    showResult = (resultText: string) => {
+        this.resultElement.innerText = resultText;
         this.resultElement.classList.remove("hidden");
+    };
+
+    hideResult = () => {
+        this.resultElement.classList.add("hidden");
+    };
+
+    getRoundedString = (x: number): string => {
+        // TODO: Smarter rounding with significant digits
+        return String(Math.round(x * 1e6) / 1e6);
     };
 
     setContent = (newContent: string) => {
@@ -137,57 +155,85 @@ export class Expression {
 
     evaluate = () => {
         this.hideError();
+        this.hideResult();
 
         try {
-            // Figure out if it's a field definition or not
-            const preEvalMatch = this.expressionString.match(
-                /^\s*(?<fieldName>[A-Za-z\d]\w*)\s*=(?<fieldContent>.*)/,
-            );
+            // FUNCTION MATCHER:
+            // /^\s*(?<FNNAME>[a-z]\w*)\s*\(\s*(?<FNARGS>(?:[a-z]\w*(?:\s*,\s*[a-z]\w*\s*)*)?)\s*\)\s*=\s*(?<FNDEF>.*)$/gmi
 
-            // Split into declaration and definition around an = sign (yucky code!)
-            // todo: prep support for conditionals by using a regex matcher instead
-            const parts = this.expressionString.split("=");
-            if (parts.length > 2)
-                throw new CalculatorError("Too many equals signs!");
+            // VARIABLE MATCHER:
+            // /^\s*(?<VRNAME>[a-z]\w*)\s*=\s*(?<VRDEF>.*)$/gmi
 
-            if (preEvalMatch) {
-                if (!preEvalMatch.groups)
-                    throw new Error("Error during parsing field declaration!");
+            // If none of the above match, the expression is assumes to be a standalone expression.
 
-                const { groups } = preEvalMatch;
+            const typeMatcher =
+                /^\s*(?<VRNAME>[a-z]\w*)\s*=\s*(?<VRDEF>.*)$|^\s*(?<FNNAME>[a-z]\w*)\s*\(\s*(?<FNARGS>(?:[a-z]\w*(?:\s*,\s*[a-z]\w*\s*)*)?)\s*\)\s*=\s*(?<FNDEF>.*)/im;
 
-                // Field definition
-                const parser = new Parser(groups.fieldContent);
-                this.value = parser.evaluate(this);
+            const typeMatch = this.expressionString.match(typeMatcher);
 
-                // Delete the old definition, if there is one
-                if (this.definedField) {
-                    this.calculator.globalContext.removeField(
-                        this.definedField,
+            console.log(typeMatch);
+
+            if (typeMatch) {
+                if (!typeMatch.groups)
+                    throw new Error("Pre-evaluation regex match failed!");
+
+                const { groups } = typeMatch;
+
+                // Delete any old variable or function that this expression defined
+                if (this.definedVariable) {
+                    delete this.calculator.globalContext.variables[
+                        this.definedVariable
+                    ];
+                } else if (this.definedFunction) {
+                    delete this.calculator.globalContext.functions[
+                        this.definedFunction
+                    ];
+                }
+
+                // Check if the field declaration is a function or a variable
+                if (groups.FNNAME) {
+                    // Was a function. Don't evaluate, just store in the global calculator context
+                    const fns = this.calculator.globalContext.functions;
+                    if (fns[groups.FNNAME]) {
+                        throw new CalculatorError(
+                            `Function "${groups.FNNAME}" is already defined!`,
+                        );
+                    }
+                    fns[groups.FNNAME] = this;
+                    this.definedFunction = groups.FNNAME;
+                    this.arguments = groups.FNARGS.split(",").map((e) =>
+                        e.trim(),
+                    );
+                    this.fnDef = groups.FNDEF;
+                } else {
+                    // Was a variable. Compute value, store self in global context
+                    const vars = this.calculator.globalContext.variables;
+                    if (vars[groups.VRNAME]) {
+                        throw new CalculatorError(
+                            `Variable ${groups.VRNAME} is already defined!`,
+                        );
+                    }
+                    vars[groups.VRNAME] = this;
+                    this.definedVariable = groups.VRNAME;
+
+                    // Calculate the value of this expression
+                    const parser = new Parser(groups.VRDEF);
+                    this.value = parser.evaluate(this);
+
+                    // Show the result
+                    this.showResult(
+                        `${this.definedVariable} = ${this.getRoundedString(this.value)}`,
                     );
                 }
 
-                // Get the defined field
-                this.definedField = groups.fieldName;
-
-                if (
-                    this.calculator.globalContext.tryGetField(this.definedField)
-                ) {
-                    this.definedField = null;
-                    throw new CalculatorError(
-                        `Field '${this.definedField}' is already defined!`,
-                    );
-                }
-
-                this.calculator.globalContext.addField(this.definedField, this);
-
-                // Reevaluate all expressions that used this variable
+                // Reevaluate all expressions that used this field
                 for (const user of this.usedBy) {
                     user.evaluate();
                 }
             } else {
                 const parser = new Parser(this.expressionString);
                 this.value = parser.evaluate(this);
+                this.showResult(this.getRoundedString(this.value));
             }
 
             // Reset complexity multiplier if parse succeeded
@@ -220,9 +266,6 @@ export class Expression {
                 this.showError("INTERNAL ERROR: \n" + e.message);
             }
         }
-
-        // TODO: Smarter rounding with significant digits
-        this.resultElement.innerText = `${this.definedField ?? ""} = ${Math.round(this.value * 1e6) / 1e6}`;
     };
 }
 
@@ -253,7 +296,7 @@ export class Calculator {
         this.expressionListElement.removeChild(expression.element);
 
         // Remove any field definitions from the expression
-        const definedField = expression.definedField;
+        const definedField = expression.definedVariable;
         if (definedField) {
             this.globalContext.removeField(definedField);
         }
@@ -265,7 +308,7 @@ export class Calculator {
      * @param newValue The new content of this expression
      */
     setExpressionContent(expression: Expression, newValue: string) {
-        const definedField = expression.definedField;
+        const definedField = expression.definedVariable;
 
         // Clear the defined field if there is one
         if (definedField) {

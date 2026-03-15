@@ -1,7 +1,6 @@
 - Functions
-    * Add a setDisplayVisibility(resultVisible, errorVisible) function
     * Check for functions in the preEval matcher. If it's a function, don't evaluate
-        it and mark the expression as a function (add an ExpressionType type?)
+        it and add the expression to the global context's functions
     * Make the CalculatorContext of a parser be passed in a list to the function
     * Add FUN as type in the parser for function calls and as an AstNodeType. When
         constructing the AST tree, store the function arguments (as strings, don't
@@ -9,7 +8,9 @@
     * When hitting a FUN node, make a new CalculatorContext, parse and evaluate the
         arguments (which can throw their own errors), then parse the expression that
         the FUN node points to with this context added in the list
-- Add a scrollbox around the expression list, automatically scroll to bottom when
-    adding an expression
-- Make the introduction collapsible
+- Automatically scroll to bottom when adding an expression to keep mouse on button
+- Make the introduction collapsible upwards
+- Add even more laxy error texts and responses
+    * At least 6 per operator type
+- Mobile support
 - Put up on GHP
