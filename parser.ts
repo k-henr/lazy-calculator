@@ -1,5 +1,6 @@
 import {
     CalculatorContext,
+    CalculatorContextLayer,
     CalculatorError,
     Expression,
     LazyError,
@@ -30,11 +31,22 @@ export class Parser {
         this.inputString = inputString;
     }
 
-    evaluate(expression: Expression, context: CalculatorContext): number {
+    evaluate(
+        requestingExpression: Expression,
+        context: CalculatorContext,
+    ): number {
+        console.log("Entering eval for " + this.inputString);
         this.tokenize();
-        // console.log([...this.tokens!]);
+        console.log([...this.tokens!]);
         this.buildTree();
-        return this.evaluateTree(expression, context, this.astTree);
+        console.log(this.astTree);
+        const result = this.evaluateTree(
+            requestingExpression,
+            context,
+            this.astTree,
+        );
+        console.log("Exiting eval for " + this.inputString);
+        return result;
     }
 
     /**
@@ -186,18 +198,22 @@ export class Parser {
     }
 
     evaluateTree(
-        expression: Expression,
+        requestingExpression: Expression,
         context: CalculatorContext,
         node: DirtyAstTreeNode | undefined,
     ): number {
         if (node === undefined) return 0;
 
+        console.log("Evaluating node on rquest by:");
+        console.log(requestingExpression);
+
         if (typeof node === "string") {
-            const dependency = context.variables[node];
+            console.log("Node was a variable");
+            const dependency = context.getVariable(node);
             if (!dependency)
                 throw new CalculatorError(`Variable "${node}" not found!`);
 
-            dependency.usedBy.add(expression);
+            dependency.usedBy.add(requestingExpression);
             return dependency.value;
         }
         if (typeof node === "number") {
@@ -207,43 +223,67 @@ export class Parser {
         // Kinda yucky check for if it's a function node
         if ("functionName" in node) {
             node = node as FunctionNode;
+
             // Get the referenced expression
-            const e = context.functions[node.functionName];
+            const e = context.getFunction(node.functionName);
             if (!e)
                 throw new CalculatorError(
                     `Function "${node.functionName}" not found!`,
                 );
             if (node.functionArguments.length !== e.arguments.length)
                 throw new CalculatorError(
-                    `Argument count of ${e.definedFunction} is ${node.functionArguments.length}; expected ${e.arguments.length}`,
+                    `Argument count of ${node.functionName} is ${node.functionArguments.length}; expected ${e.arguments.length}`,
                 );
 
             // Mark this expression as using the function's expression
-            e.usedBy.add(expression);
+            e.usedBy.add(requestingExpression);
 
-            // Copy the context and overwrite the function arguments
-            const functionContext: CalculatorContext = {
-                variables: { ...context.variables },
-                functions: { ...context.functions },
+            // Add a new context layer for this function call (allows wackscoping atm)
+            const functionLayer: CalculatorContextLayer = {
+                variables: {},
+                functions: {},
             };
 
             for (const i in e.arguments) {
                 // Parse argument expression
-                functionContext.variables[e.arguments[i]] = new Expression(
-                    expression.calculator,
+                functionLayer.variables[e.arguments[i]] = new Expression(
+                    requestingExpression.calculator,
                     node.functionArguments[i],
                     false,
+                    false,
+                    requestingExpression,
                 );
+                console.log("A");
             }
 
+            // Create a new context with this additional layer
+            const functionContext = context.copy();
+            functionContext.addLayer(functionLayer);
+
             // Evaluate and return the function's value
-            return e.getValue(expression, functionContext);
+            console.log(
+                "Stepping into function " +
+                    node.functionName +
+                    " with following requester:",
+            );
+            console.log(requestingExpression);
+            const result = e.getValue(requestingExpression, functionContext);
+            console.log("Stepping out of function " + node.functionName);
+            return result;
         }
 
         node = node as AstTreeNode;
 
-        const v1 = this.evaluateTree(expression, context, node.value1);
-        const v2 = this.evaluateTree(expression, context, node.value2);
+        const v1 = this.evaluateTree(
+            requestingExpression,
+            context,
+            node.value1,
+        );
+        const v2 = this.evaluateTree(
+            requestingExpression,
+            context,
+            node.value2,
+        );
 
         const v1Len = String(v1).length;
         const v2Len = String(v2).length;
@@ -251,7 +291,7 @@ export class Parser {
         switch (node.operator) {
             case "ADD":
                 this.checkGiveUp(
-                    expression,
+                    requestingExpression,
                     0.2 * Math.min(v1Len + 0.1 * v2Len, v2Len + 0.1 * v1Len),
                     [
                         "Adding big numbers is boring",
@@ -262,15 +302,20 @@ export class Parser {
                 return v1 + v2;
 
             case "SUB":
-                this.checkGiveUp(expression, 0.4 * Math.min(v1Len, v2Len), [
-                    "Calculator doesn't like subtraction",
-                    "Too tired to figure out the carry rules",
-                    "Scared of negative numbers",
-                ]);
+                this.checkGiveUp(
+                    requestingExpression,
+                    0.4 * Math.min(v1Len, v2Len),
+                    [
+                        "Calculator doesn't like subtraction",
+                        "Too tired to figure out the carry rules",
+                        "Scared of negative numbers",
+                    ],
+                );
                 return v1 - v2;
 
             case "DIV":
-                this.checkGiveUp(expression, 0.5 * v2Len, [
+                console.log("Evaluating DIV");
+                this.checkGiveUp(requestingExpression, 0.5 * v2Len, [
                     "Division is difficult",
                     "Forgot which one was the numerator",
                     "Doesn't want to risk infinite decimals",
@@ -279,16 +324,20 @@ export class Parser {
                 return v1 / v2;
 
             case "MUL":
-                this.checkGiveUp(expression, 0.5 * Math.max(v1Len, v2Len), [
-                    "Multiplication too difficult to do without pen and paper",
-                    "That's a lot of numbers to multiply",
-                    "Calculator isn't sure how lattice multiplication works; Scared of doing it wrong",
-                ]);
+                this.checkGiveUp(
+                    requestingExpression,
+                    0.5 * Math.max(v1Len, v2Len),
+                    [
+                        "Multiplication too difficult to do without pen and paper",
+                        "That's a lot of numbers to multiply",
+                        "Calculator isn't sure how lattice multiplication works; Scared of doing it wrong",
+                    ],
+                );
                 return v1 * v2;
 
             case "EXP":
                 this.checkGiveUp(
-                    expression,
+                    requestingExpression,
                     0.8 * Math.max(0.75 * v1Len, (v2Len - 1) * v2Len),
                     [
                         "Exponents are too difficult",
@@ -333,6 +382,8 @@ export class Parser {
                             Math.floor(Math.random() * buttonContents.length)
                         ],
                         callback: () => {
+                            console.log("RETRYING");
+                            console.log(expression);
                             expression.complexityMultiplier *= 0.75;
                             expression.update();
                         },

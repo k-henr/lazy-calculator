@@ -21,10 +21,19 @@
     constructor(inputString) {
       this.inputString = inputString;
     }
-    evaluate(expression, context) {
+    evaluate(requestingExpression, context) {
+      console.log("Entering eval for " + this.inputString);
       this.tokenize();
+      console.log([...this.tokens]);
       this.buildTree();
-      return this.evaluateTree(expression, context, this.astTree);
+      console.log(this.astTree);
+      const result = this.evaluateTree(
+        requestingExpression,
+        context,
+        this.astTree
+      );
+      console.log("Exiting eval for " + this.inputString);
+      return result;
     }
     /**
      * Tokenize this parser's expression.
@@ -151,13 +160,16 @@
       }
       throw new CalculatorError(`Unexpected token ${t.type}`);
     }
-    evaluateTree(expression, context, node) {
+    evaluateTree(requestingExpression, context, node) {
       if (node === void 0) return 0;
+      console.log("Evaluating node on rquest by:");
+      console.log(requestingExpression);
       if (typeof node === "string") {
-        const dependency = context.variables[node];
+        console.log("Node was a variable");
+        const dependency = context.getVariable(node);
         if (!dependency)
           throw new CalculatorError(`Variable "${node}" not found!`);
-        dependency.usedBy.add(expression);
+        dependency.usedBy.add(requestingExpression);
         return dependency.value;
       }
       if (typeof node === "number") {
@@ -165,38 +177,57 @@
       }
       if ("functionName" in node) {
         node = node;
-        const e = context.functions[node.functionName];
+        const e = context.getFunction(node.functionName);
         if (!e)
           throw new CalculatorError(
             `Function "${node.functionName}" not found!`
           );
         if (node.functionArguments.length !== e.arguments.length)
           throw new CalculatorError(
-            `Argument count of ${e.definedFunction} is ${node.functionArguments.length}; expected ${e.arguments.length}`
+            `Argument count of ${node.functionName} is ${node.functionArguments.length}; expected ${e.arguments.length}`
           );
-        e.usedBy.add(expression);
-        const functionContext = {
-          variables: { ...context.variables },
-          functions: { ...context.functions }
+        e.usedBy.add(requestingExpression);
+        const functionLayer = {
+          variables: {},
+          functions: {}
         };
         for (const i in e.arguments) {
-          functionContext.variables[e.arguments[i]] = new Expression(
-            expression.calculator,
+          functionLayer.variables[e.arguments[i]] = new Expression(
+            requestingExpression.calculator,
             node.functionArguments[i],
-            false
+            false,
+            false,
+            requestingExpression
           );
+          console.log("A");
         }
-        return e.getValue(expression, functionContext);
+        const functionContext = context.copy();
+        functionContext.addLayer(functionLayer);
+        console.log(
+          "Stepping into function " + node.functionName + " with following requester:"
+        );
+        console.log(requestingExpression);
+        const result = e.getValue(requestingExpression, functionContext);
+        console.log("Stepping out of function " + node.functionName);
+        return result;
       }
       node = node;
-      const v1 = this.evaluateTree(expression, context, node.value1);
-      const v2 = this.evaluateTree(expression, context, node.value2);
+      const v1 = this.evaluateTree(
+        requestingExpression,
+        context,
+        node.value1
+      );
+      const v2 = this.evaluateTree(
+        requestingExpression,
+        context,
+        node.value2
+      );
       const v1Len = String(v1).length;
       const v2Len = String(v2).length;
       switch (node.operator) {
         case "ADD":
           this.checkGiveUp(
-            expression,
+            requestingExpression,
             0.2 * Math.min(v1Len + 0.1 * v2Len, v2Len + 0.1 * v1Len),
             [
               "Adding big numbers is boring",
@@ -206,14 +237,19 @@
           );
           return v1 + v2;
         case "SUB":
-          this.checkGiveUp(expression, 0.4 * Math.min(v1Len, v2Len), [
-            "Calculator doesn't like subtraction",
-            "Too tired to figure out the carry rules",
-            "Scared of negative numbers"
-          ]);
+          this.checkGiveUp(
+            requestingExpression,
+            0.4 * Math.min(v1Len, v2Len),
+            [
+              "Calculator doesn't like subtraction",
+              "Too tired to figure out the carry rules",
+              "Scared of negative numbers"
+            ]
+          );
           return v1 - v2;
         case "DIV":
-          this.checkGiveUp(expression, 0.5 * v2Len, [
+          console.log("Evaluating DIV");
+          this.checkGiveUp(requestingExpression, 0.5 * v2Len, [
             "Division is difficult",
             "Forgot which one was the numerator",
             "Doesn't want to risk infinite decimals",
@@ -221,15 +257,19 @@
           ]);
           return v1 / v2;
         case "MUL":
-          this.checkGiveUp(expression, 0.5 * Math.max(v1Len, v2Len), [
-            "Multiplication too difficult to do without pen and paper",
-            "That's a lot of numbers to multiply",
-            "Calculator isn't sure how lattice multiplication works; Scared of doing it wrong"
-          ]);
+          this.checkGiveUp(
+            requestingExpression,
+            0.5 * Math.max(v1Len, v2Len),
+            [
+              "Multiplication too difficult to do without pen and paper",
+              "That's a lot of numbers to multiply",
+              "Calculator isn't sure how lattice multiplication works; Scared of doing it wrong"
+            ]
+          );
           return v1 * v2;
         case "EXP":
           this.checkGiveUp(
-            expression,
+            requestingExpression,
             0.8 * Math.max(0.75 * v1Len, (v2Len - 1) * v2Len),
             [
               "Exponents are too difficult",
@@ -265,6 +305,8 @@
             {
               name: buttonContents[Math.floor(Math.random() * buttonContents.length)],
               callback: () => {
+                console.log("RETRYING");
+                console.log(expression);
                 expression.complexityMultiplier *= 0.75;
                 expression.update();
               }
@@ -308,6 +350,35 @@
       this.options = options;
     }
   };
+  var CalculatorContext2 = class _CalculatorContext {
+    layers = [];
+    addBlankLayer = () => {
+      this.addLayer({
+        variables: {},
+        functions: {}
+      });
+    };
+    addLayer = (layer) => {
+      this.layers.unshift(layer);
+    };
+    getVariable = (name) => {
+      for (const l of this.layers) {
+        if (l.variables[name]) return l.variables[name];
+      }
+      throw new CalculatorError(`Variable "${name}" not found!`);
+    };
+    getFunction = (name) => {
+      for (const l of this.layers) {
+        if (l.functions[name]) return l.functions[name];
+      }
+      throw new CalculatorError(`Function "${name}" not found!`);
+    };
+    copy = () => {
+      const newCtx = new _CalculatorContext();
+      newCtx.layers = [...this.layers];
+      return newCtx;
+    };
+  };
   var Expression = class {
     calculator;
     element = null;
@@ -333,7 +404,7 @@
     errorButtonTemplate = document.querySelector(
       "#error-button-template"
     );
-    constructor(calculator2, expressionString, addVisual = true, coffeeMode = false) {
+    constructor(calculator2, expressionString, addVisual = true, coffeeMode = false, requestingExpression = this) {
       this.calculator = calculator2;
       this.expressionString = expressionString;
       this.coffeeMode = coffeeMode;
@@ -376,7 +447,7 @@
         };
         calculator2.expressionListElement.appendChild(this.element);
       }
-      this.setContent(expressionString);
+      this.update(requestingExpression);
     }
     showError = (errorText) => {
       this.errorWrapper?.classList.remove("hidden");
@@ -401,11 +472,11 @@
     getRoundedString = (x) => {
       return String(Math.round(x * 1e6) / 1e6);
     };
-    setContent = (newContent) => {
+    setContent = (newContent, requestingExpression = this) => {
       this.expressionString = newContent;
-      this.update();
+      this.update(requestingExpression);
     };
-    update = () => {
+    update = (requestingExpression = this) => {
       this.hideError();
       this.hideResult();
       try {
@@ -416,12 +487,12 @@
             throw new Error("Pre-evaluation regex match failed!");
           const { groups } = typeMatch;
           if (this.definedVariable) {
-            delete this.calculator.globalContext.variables[this.definedVariable];
+            delete this.calculator.globalContext.layers[0].variables[this.definedVariable];
           } else if (this.definedFunction) {
-            delete this.calculator.globalContext.functions[this.definedFunction];
+            delete this.calculator.globalContext.layers[0].functions[this.definedFunction];
           }
           if (groups.FNNAME) {
-            const fns = this.calculator.globalContext.functions;
+            const fns = this.calculator.globalContext.layers[0].functions;
             if (fns[groups.FNNAME]) {
               throw new CalculatorError(
                 `Function "${groups.FNNAME}" is already defined!`
@@ -434,7 +505,7 @@
             );
             this.expressionContent = groups.FNDEF;
           } else {
-            const vars = this.calculator.globalContext.variables;
+            const vars = this.calculator.globalContext.layers[0].variables;
             if (vars[groups.VRNAME]) {
               throw new CalculatorError(
                 `Variable ${groups.VRNAME} is already defined!`
@@ -444,7 +515,7 @@
             this.definedVariable = groups.VRNAME;
             this.expressionContent = groups.VRDEF;
             this.value = this.getValue(
-              this,
+              requestingExpression,
               this.calculator.globalContext
             );
             this.showResult(
@@ -456,7 +527,10 @@
           }
         } else {
           this.expressionContent = this.expressionString;
-          this.value = this.getValue(this, this.calculator.globalContext);
+          this.value = this.getValue(
+            requestingExpression,
+            this.calculator.globalContext
+          );
           this.showResult(this.getRoundedString(this.value));
         }
         if (!this.coffeeMode) this.complexityMultiplier = 1;
@@ -487,12 +561,19 @@
       );
     }
   };
-  var JSFunctionExpression = class extends Expression {
+  var JSFunctionExpression = class _JSFunctionExpression extends Expression {
     runnable;
-    constructor(calculator2, fnArguments, runnable, addVisual = true, coffeeMode = false) {
+    constructor(calculator2, fnArguments, runnable, addVisual = false, coffeeMode = true) {
       super(calculator2, "", addVisual, coffeeMode);
       this.arguments = fnArguments;
       this.runnable = runnable;
+    }
+    static simpleMaths(calc, fn) {
+      return new _JSFunctionExpression(
+        calc,
+        ["x"],
+        (e, ctx) => fn(ctx.getVariable("x").getValue(e, ctx))
+      );
     }
     getValue = (requestingExpression, context) => {
       return this.runnable(requestingExpression, context);
@@ -500,33 +581,58 @@
   };
   var Calculator = class {
     expressionListElement;
-    globalContext = {
-      functions: {
-        sin: new JSFunctionExpression(
-          this,
-          ["x"],
-          (e, ctx) => Math.sin(ctx.variables["x"].getValue(e, ctx)),
-          false,
-          true
-        )
-      },
-      variables: {
-        TAU: new Expression(
-          this,
-          "6.28318530717958647692528676655901",
-          false,
-          true
-        )
-      }
-    };
+    globalContext = new CalculatorContext2();
     constructor(expressionList2) {
       this.expressionListElement = expressionList2;
+      this.globalContext.addLayer({
+        functions: {
+          sin: JSFunctionExpression.simpleMaths(this, Math.sin),
+          cos: JSFunctionExpression.simpleMaths(this, Math.cos),
+          tan: JSFunctionExpression.simpleMaths(this, Math.tan),
+          arcsin: JSFunctionExpression.simpleMaths(this, Math.asin),
+          arccos: JSFunctionExpression.simpleMaths(this, Math.acos),
+          arctan: JSFunctionExpression.simpleMaths(this, Math.atan),
+          abs: JSFunctionExpression.simpleMaths(this, Math.abs),
+          round: JSFunctionExpression.simpleMaths(this, Math.round),
+          ln: JSFunctionExpression.simpleMaths(this, Math.log),
+          log: JSFunctionExpression.simpleMaths(this, Math.log10),
+          sqrt: JSFunctionExpression.simpleMaths(this, Math.sqrt),
+          cbrt: JSFunctionExpression.simpleMaths(this, Math.cbrt),
+          round2: new JSFunctionExpression(
+            this,
+            ["x", "places"],
+            (e, ctx) => {
+              const p = Math.pow(
+                10,
+                ctx.getVariable("places").getValue(e, ctx)
+              );
+              return Math.round(
+                ctx.getVariable("x").getValue(e, ctx) * p
+              ) / p;
+            }
+          )
+        },
+        variables: {
+          TAU: new Expression(
+            this,
+            "6.28318530717958647692528676655901",
+            false,
+            true
+          ),
+          E: new Expression(
+            this,
+            "2.718281828459045235360287471352",
+            false,
+            true
+          )
+        }
+      });
     }
     /**
      * Add a new, empty expression to this calculator.
      */
     addExpression() {
-      const expression = new Expression(this, "");
+      new Expression(this, "");
     }
     /**
      * Remove the given expression.
@@ -536,9 +642,9 @@
       if (expression.element)
         this.expressionListElement.removeChild(expression.element);
       if (expression.definedFunction) {
-        delete this.globalContext.functions[expression.definedFunction];
+        delete this.globalContext.layers[0].functions[expression.definedFunction];
       } else if (expression.definedVariable) {
-        delete this.globalContext.functions[expression.definedVariable];
+        delete this.globalContext.layers[0].functions[expression.definedVariable];
       }
     }
     /**

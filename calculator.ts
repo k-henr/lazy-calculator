@@ -19,7 +19,42 @@ export class LazyError extends CalculatorError {
     }
 }
 
-export type CalculatorContext = {
+export class CalculatorContext {
+    layers: CalculatorContextLayer[] = [];
+
+    addBlankLayer = () => {
+        this.addLayer({
+            variables: {},
+            functions: {},
+        });
+    };
+
+    addLayer = (layer: CalculatorContextLayer) => {
+        this.layers.unshift(layer);
+    };
+
+    getVariable = (name: string) => {
+        for (const l of this.layers) {
+            if (l.variables[name]) return l.variables[name];
+        }
+        throw new CalculatorError(`Variable "${name}" not found!`);
+    };
+
+    getFunction = (name: string) => {
+        for (const l of this.layers) {
+            if (l.functions[name]) return l.functions[name];
+        }
+        throw new CalculatorError(`Function "${name}" not found!`);
+    };
+
+    copy = () => {
+        const newCtx = new CalculatorContext();
+        newCtx.layers = [...this.layers];
+        return newCtx;
+    };
+}
+
+export type CalculatorContextLayer = {
     variables: { [key: string]: Expression };
     functions: { [key: string]: Expression };
 };
@@ -60,6 +95,7 @@ export class Expression {
         expressionString: string,
         addVisual: boolean = true,
         coffeeMode: boolean = false, // whether laziness is possible
+        requestingExpression: Expression = this, // if this is a hidden or intermediate expression (like a function argument), it may need to bring along a requesting expression
     ) {
         this.calculator = calculator;
         this.expressionString = expressionString;
@@ -121,7 +157,8 @@ export class Expression {
             calculator.expressionListElement.appendChild(this.element);
         }
 
-        this.setContent(expressionString);
+        // Automatically parse and evaluate the expression
+        this.update(requestingExpression);
     }
 
     showError = (errorText: string) => {
@@ -153,12 +190,15 @@ export class Expression {
         return String(Math.round(x * 1e6) / 1e6);
     };
 
-    setContent = (newContent: string) => {
+    setContent = (
+        newContent: string,
+        requestingExpression: Expression = this,
+    ) => {
         this.expressionString = newContent;
-        this.update();
+        this.update(requestingExpression);
     };
 
-    update = () => {
+    update = (requestingExpression: Expression = this) => {
         this.hideError();
         this.hideResult();
 
@@ -184,11 +224,11 @@ export class Expression {
 
                 // Delete any old variable or function that this expression defined
                 if (this.definedVariable) {
-                    delete this.calculator.globalContext.variables[
+                    delete this.calculator.globalContext.layers[0].variables[
                         this.definedVariable
                     ];
                 } else if (this.definedFunction) {
-                    delete this.calculator.globalContext.functions[
+                    delete this.calculator.globalContext.layers[0].functions[
                         this.definedFunction
                     ];
                 }
@@ -196,7 +236,8 @@ export class Expression {
                 // Check if the field declaration is a function or a variable
                 if (groups.FNNAME) {
                     // Was a function. Don't evaluate, just store in the global calculator context
-                    const fns = this.calculator.globalContext.functions;
+                    const fns =
+                        this.calculator.globalContext.layers[0].functions;
                     if (fns[groups.FNNAME]) {
                         throw new CalculatorError(
                             `Function "${groups.FNNAME}" is already defined!`,
@@ -210,7 +251,8 @@ export class Expression {
                     this.expressionContent = groups.FNDEF;
                 } else {
                     // Was a variable. Compute value, store self in global context
-                    const vars = this.calculator.globalContext.variables;
+                    const vars =
+                        this.calculator.globalContext.layers[0].variables;
                     if (vars[groups.VRNAME]) {
                         throw new CalculatorError(
                             `Variable ${groups.VRNAME} is already defined!`,
@@ -222,7 +264,7 @@ export class Expression {
                     // Calculate the value of this expression
                     this.expressionContent = groups.VRDEF;
                     this.value = this.getValue(
-                        this,
+                        requestingExpression,
                         this.calculator.globalContext,
                     );
 
@@ -238,7 +280,10 @@ export class Expression {
                 }
             } else {
                 this.expressionContent = this.expressionString;
-                this.value = this.getValue(this, this.calculator.globalContext);
+                this.value = this.getValue(
+                    requestingExpression,
+                    this.calculator.globalContext,
+                );
                 this.showResult(this.getRoundedString(this.value));
             }
 
@@ -295,12 +340,21 @@ class JSFunctionExpression extends Expression {
         calculator: Calculator,
         fnArguments: string[],
         runnable: Function,
-        addVisual: boolean = true,
-        coffeeMode: boolean = false, // whether laziness is possible
+        addVisual: boolean = false,
+        coffeeMode: boolean = true, // whether laziness is possible
     ) {
         super(calculator, "", addVisual, coffeeMode);
         this.arguments = fnArguments;
         this.runnable = runnable;
+    }
+
+    static simpleMaths(calc: Calculator, fn: Function): JSFunctionExpression {
+        return new JSFunctionExpression(
+            calc,
+            ["x"],
+            (e: Expression, ctx: CalculatorContext) =>
+                fn(ctx.getVariable("x").getValue(e, ctx)),
+        );
     }
 
     getValue = (
@@ -314,36 +368,64 @@ class JSFunctionExpression extends Expression {
 export class Calculator {
     expressionListElement: HTMLElement;
 
-    globalContext: CalculatorContext = {
-        functions: {
-            sin: new JSFunctionExpression(
-                this,
-                ["x"],
-                (e: Expression, ctx: CalculatorContext) =>
-                    Math.sin(ctx.variables["x"].getValue(e, ctx)),
-                false,
-                true,
-            ),
-        },
-        variables: {
-            TAU: new Expression(
-                this,
-                "6.28318530717958647692528676655901",
-                false,
-                true,
-            ),
-        },
-    };
+    globalContext: CalculatorContext = new CalculatorContext();
 
     constructor(expressionList: HTMLElement) {
         this.expressionListElement = expressionList;
+
+        // Add some builtins
+        this.globalContext.addLayer({
+            functions: {
+                sin: JSFunctionExpression.simpleMaths(this, Math.sin),
+                cos: JSFunctionExpression.simpleMaths(this, Math.cos),
+                tan: JSFunctionExpression.simpleMaths(this, Math.tan),
+                arcsin: JSFunctionExpression.simpleMaths(this, Math.asin),
+                arccos: JSFunctionExpression.simpleMaths(this, Math.acos),
+                arctan: JSFunctionExpression.simpleMaths(this, Math.atan),
+                abs: JSFunctionExpression.simpleMaths(this, Math.abs),
+                round: JSFunctionExpression.simpleMaths(this, Math.round),
+                ln: JSFunctionExpression.simpleMaths(this, Math.log),
+                log: JSFunctionExpression.simpleMaths(this, Math.log10),
+                sqrt: JSFunctionExpression.simpleMaths(this, Math.sqrt),
+                cbrt: JSFunctionExpression.simpleMaths(this, Math.cbrt),
+                round2: new JSFunctionExpression(
+                    this,
+                    ["x", "places"],
+                    (e: Expression, ctx: CalculatorContext) => {
+                        const p = Math.pow(
+                            10,
+                            ctx.getVariable("places").getValue(e, ctx),
+                        );
+                        return (
+                            Math.round(
+                                ctx.getVariable("x").getValue(e, ctx) * p,
+                            ) / p
+                        );
+                    },
+                ),
+            },
+            variables: {
+                TAU: new Expression(
+                    this,
+                    "6.28318530717958647692528676655901",
+                    false,
+                    true,
+                ),
+                E: new Expression(
+                    this,
+                    "2.718281828459045235360287471352",
+                    false,
+                    true,
+                ),
+            },
+        });
     }
 
     /**
      * Add a new, empty expression to this calculator.
      */
     addExpression() {
-        const expression = new Expression(this, "");
+        new Expression(this, "");
     }
 
     /**
@@ -357,9 +439,13 @@ export class Calculator {
 
         // Remove any field definitions from the expression
         if (expression.definedFunction) {
-            delete this.globalContext.functions[expression.definedFunction];
+            delete this.globalContext.layers[0].functions[
+                expression.definedFunction
+            ];
         } else if (expression.definedVariable) {
-            delete this.globalContext.functions[expression.definedVariable];
+            delete this.globalContext.layers[0].functions[
+                expression.definedVariable
+            ];
         }
     }
 
