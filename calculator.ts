@@ -185,7 +185,7 @@ export class Expression {
         this.resultElement?.classList.add("hidden");
     };
 
-    getRoundedString = (x: number): string => {
+    static getRoundedString = (x: number): string => {
         // TODO: Smarter rounding with significant digits
         return String(Math.round(x * 1e6) / 1e6);
     };
@@ -270,7 +270,7 @@ export class Expression {
 
                     // Show the result
                     this.showResult(
-                        `${this.definedVariable} = ${this.getRoundedString(this.value)}`,
+                        `${this.definedVariable} = ${Expression.getRoundedString(this.value)}`,
                     );
                 }
 
@@ -284,7 +284,7 @@ export class Expression {
                     requestingExpression,
                     this.calculator.globalContext,
                 );
-                this.showResult(this.getRoundedString(this.value));
+                this.showResult(Expression.getRoundedString(this.value));
             }
 
             // Reset complexity multiplier if parse succeeded

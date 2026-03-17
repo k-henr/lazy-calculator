@@ -1,6 +1,3 @@
-- Add even more lazy error texts and responses.
-    * At least 6 per operator type
-    * At least 10 possible answers
 - Mobile support
 - Make a favicon
 - Remove console logs

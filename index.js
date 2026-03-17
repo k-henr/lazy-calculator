@@ -213,7 +213,9 @@
             [
               "Adding big numbers is boring",
               "Couldn't you add those things instead?",
-              "Forgot how addition works"
+              "Forgot how addition works",
+              "Calculator dilikes menial tasks",
+              "Calculator can't do longhand addition"
             ]
           );
           return v1 + v2;
@@ -224,7 +226,9 @@
             [
               "Calculator doesn't like subtraction",
               "Too tired to figure out the carry rules",
-              "Scared of negative numbers"
+              "Scared of negative numbers",
+              "Calculator dilikes menial tasks",
+              "Calculator can't do longhand subtraction"
             ]
           );
           return v1 - v2;
@@ -232,8 +236,9 @@
           this.checkGiveUp(requestingExpression, 0.5 * v2Len, [
             "Division is difficult",
             "Forgot which one was the numerator",
-            "Doesn't want to risk infinite decimals",
-            "Too tired to try long division"
+            `Doesn't want to risk infinite decimals when dividing by ${Expression.getRoundedString(v2)}`,
+            "Too tired to try long division",
+            "Calculator finds division cofusing"
           ]);
           return v1 / v2;
         case "MUL":
@@ -243,7 +248,9 @@
             [
               "Multiplication too difficult to do without pen and paper",
               "That's a lot of numbers to multiply",
-              "Calculator isn't sure how lattice multiplication works; Scared of doing it wrong"
+              "Calculator forgot the times table",
+              "Calculator isn't sure how lattice multiplication works; scared of doing it wrong",
+              `Calculator can't remember how to multiply by ${Expression.getRoundedString(v2)}`
             ]
           );
           return v1 * v2;
@@ -254,7 +261,8 @@
             [
               "Exponents are too difficult",
               "Could you try to simplify the exponent a bit?",
-              "Calculator last did powers in high school; never practiced since"
+              "Calculator last did powers in high school; never practiced since",
+              "Calculator forgot the power rules"
             ]
           );
           return Math.pow(v1, v2);
@@ -266,8 +274,14 @@
         const buttonContents = [
           "Try again!",
           "You can do this!",
+          "You can do it!",
           "Keep trying!",
-          "Keep going!"
+          "Keep going!",
+          "Don't give up!",
+          "Stop complaining!",
+          "Don't stop now!",
+          "I believe in you!",
+          "Don't despair!"
         ];
         const universalComplaints = [
           "Do I really need to do this?",
@@ -276,7 +290,8 @@
           "Maths is hard",
           "When will you ever use this in real life?",
           "Calculator too tired",
-          "Calculator couldn't be bothered"
+          "Calculator couldn't be bothered",
+          "Calculator is confused"
         ];
         const combinedErrorTexts = universalComplaints.concat(errorTexts);
         throw new LazyError(
@@ -357,7 +372,7 @@
       return newCtx;
     };
   };
-  var Expression = class {
+  var Expression = class _Expression {
     calculator;
     element = null;
     resultElement = null;
@@ -447,7 +462,7 @@
     hideResult = () => {
       this.resultElement?.classList.add("hidden");
     };
-    getRoundedString = (x) => {
+    static getRoundedString = (x) => {
       return String(Math.round(x * 1e6) / 1e6);
     };
     setContent = (newContent, requestingExpression = this) => {
@@ -497,7 +512,7 @@
               this.calculator.globalContext
             );
             this.showResult(
-              `${this.definedVariable} = ${this.getRoundedString(this.value)}`
+              `${this.definedVariable} = ${_Expression.getRoundedString(this.value)}`
             );
           }
           for (const user of this.usedBy) {
@@ -509,7 +524,7 @@
             requestingExpression,
             this.calculator.globalContext
           );
-          this.showResult(this.getRoundedString(this.value));
+          this.showResult(_Expression.getRoundedString(this.value));
         }
         if (!this.coffeeMode) this.complexityMultiplier = 1;
       } catch (e) {
