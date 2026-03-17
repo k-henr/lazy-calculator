@@ -1,5 +1,3 @@
-- Automatically scroll to bottom when adding an expression to keep mouse on button
-- Make the introduction collapsible upwards
 - Add even more lazy error texts and responses.
     * At least 6 per operator type
     * At least 10 possible answers
@@ -14,5 +12,6 @@
 - Reevaluate all errored expressions when setting expression content?
 - Reorder expressions?
 - Update usedBy expressions when an expression is removed
-- Add lazy errors to built-ins? It feels weird that it's completely fine with doing
+- Add lazy errors to built-ins. It feels weird that it's completely fine with doing
     sqrt(ln(2)) for example. Could be less sophisticated, flat chance?
+- Automatically scroll to bottom when adding an expression to keep mouse on button

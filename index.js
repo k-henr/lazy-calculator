@@ -641,5 +641,9 @@
   var calculator = new Calculator(expressionList);
   var expressionAdder = document.getElementById("expression-adder");
   if (expressionAdder) expressionAdder.onclick = () => calculator.addExpression();
+  var introCollapser = document.getElementById("collapse-intro");
+  var introduction = document.getElementById("introduction");
+  if (introCollapser && introduction)
+    introCollapser.onclick = () => introduction.classList.toggle("hidden");
   calculator.addExpression();
 })();

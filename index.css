@@ -4,34 +4,59 @@
 
 body {
     margin: 0;
-    min-height: 100vh;
+    height: 100vh;
 
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 32px;
+    padding-bottom: 128px;
+    padding-top: 32px;
 
     font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+
+#heading {
+    margin: 0px;
 }
 
 #introduction {
     width: 70%;
     min-width: 400px;
     text-align: center;
+}
+
+#intro-end {
+    width: 70%;
+    min-width: 400px;
+    height: 0px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
     border-bottom: 1px gray solid;
-    padding: 16px;
+}
+
+#collapse-intro {
+    border: none;
+    background-color: white;
+    padding: 0px 20px;
 }
 
 #calculator {
     max-width: 512px;
     width: 100%;
+    flex: 1;
 
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 4px;
-}
+    padding: 10px;
+    overflow-y: auto;
 
-#calculator > * {
-    width: 100%;
+    border: 1px solid black;
+    background-color: whitesmoke;
 }
 
 #expressions {
@@ -47,7 +72,8 @@ body {
     align-items: center;
     gap: 4px;
 
-    border: 1px solid black;
+    background-color: white;
+    border: 1px solid gray;
 }
 
 .expression * {
@@ -106,12 +132,19 @@ body {
 }
 
 #expression-adder {
+    height: 48px;
+
     cursor: pointer;
     border-radius: 0;
-    border: 1px solid black;
+    border: 1px solid gray;
 }
+
 #expression-adder > img {
     height: 32px;
+}
+
+#calculator-padding {
+    flex: 1;
 }
 
 .hidden {

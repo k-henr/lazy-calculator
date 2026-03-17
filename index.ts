@@ -9,5 +9,11 @@ const calculator = new Calculator(expressionList);
 const expressionAdder = document.getElementById("expression-adder");
 if (expressionAdder) expressionAdder.onclick = () => calculator.addExpression();
 
+// Add a listener for collapsing and un-collapsing the introduction
+const introCollapser = document.getElementById("collapse-intro");
+const introduction = document.getElementById("introduction");
+if (introCollapser && introduction)
+    introCollapser.onclick = () => introduction.classList.toggle("hidden");
+
 // Start with one empty expression
 calculator.addExpression();
