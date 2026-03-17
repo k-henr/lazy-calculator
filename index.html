@@ -3,6 +3,19 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <!-- fallback icon for no SVG support or no media query support -->
+        <link rel="icon" href="favicons/light.ico" />
+        <!-- responsive SVG icons -->
+        <link
+            rel="icon"
+            href="favicons/light.svg"
+            media="(prefers-color-scheme: light)"
+        />
+        <link
+            rel="icon"
+            href="favicons/dark.svg"
+            media="(prefers-color-scheme: dark)"
+        />
         <link rel="stylesheet" href="index.css" />
         <title>Tired Calculator</title>
     </head>

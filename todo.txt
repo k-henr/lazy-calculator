@@ -1,10 +1,8 @@
-- Mobile support
-- Make a favicon
-- Remove console logs
 - Better display of numbers
     * Take significant digits into account
     * Add a rudimentary "infinity" - if a number is large enough, display as "lots"
         or something like that
+- Remove console logs
 - Put up on GHP
 - Reevaluate all errored expressions when setting expression content?
 - Reorder expressions?
