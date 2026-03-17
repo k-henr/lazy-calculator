@@ -10,25 +10,21 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 32px;
-    padding-bottom: 128px;
-    padding-top: 32px;
+    padding: 32px 10px 10px 10px;
 
     font-family: Verdana, Geneva, Tahoma, sans-serif;
 }
 
 #heading {
     margin: 0px;
+    text-align: center;
 }
 
 #introduction {
-    width: 70%;
-    min-width: 400px;
     text-align: center;
 }
 
 #intro-end {
-    width: 70%;
-    min-width: 400px;
     height: 0px;
 
     display: flex;
@@ -42,6 +38,10 @@ body {
     border: none;
     background-color: white;
     padding: 0px 20px;
+}
+
+#collapse-intro > img {
+    height: 32px;
 }
 
 #calculator {
@@ -149,4 +149,19 @@ body {
 
 .hidden {
     display: none;
+}
+
+@media screen and (min-width: 400px) {
+    body {
+        padding-bottom: 128px;
+    }
+    #introduction {
+        width: 70%;
+        min-width: 400px;
+    }
+
+    #intro-end {
+        width: 70%;
+        min-width: 400px;
+    }
 }
