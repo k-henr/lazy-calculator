@@ -1,4 +1,3 @@
-- Remove console logs
 - Put up on GHP
 - Reevaluate all errored expressions when setting expression content?
 - Reorder expressions?

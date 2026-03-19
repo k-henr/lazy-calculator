@@ -443,7 +443,6 @@
         popup.innerHTML = "";
         popup.classList.remove("hidden");
         const errorWrapperRect = this.errorWrapper.getBoundingClientRect();
-        console.log(errorWrapperRect);
         popup.style.top = errorWrapperRect.bottom + "px";
         popup.style.left = errorWrapperRect.left + errorWrapperRect.width * 0.5 + "px";
         if (e instanceof CalculatorError) {
@@ -611,18 +610,9 @@
           )
         },
         variables: {
-          TAU: new Expression(
-            this,
-            "6.28318530717958647692528676655901",
-            false,
-            true
-          ),
-          E: new Expression(
-            this,
-            "2.718281828459045235360287471352",
-            false,
-            true
-          )
+          TAU: new Expression(this, "6.283185307179586", false, true),
+          PI: new Expression(this, "3.141592653589793", false, true),
+          E: new Expression(this, "2.718281828459045", false, true)
         }
       });
     }
