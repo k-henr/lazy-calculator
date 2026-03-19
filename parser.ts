@@ -272,7 +272,8 @@ export class Parser {
             case "ADD":
                 this.checkGiveUp(
                     requestingExpression,
-                    0.2 * Math.min(v1Len + 0.1 * v2Len, v2Len + 0.1 * v1Len),
+                    0.2 * Math.min(v1Len + 0.1 * v2Len, v2Len + 0.1 * v1Len) -
+                        2,
                     [
                         "Adding big numbers is boring",
                         "Couldn't you add those things instead?",
@@ -286,7 +287,7 @@ export class Parser {
             case "SUB":
                 this.checkGiveUp(
                     requestingExpression,
-                    0.4 * Math.min(v1Len, v2Len),
+                    0.4 * Math.min(v1Len, v2Len) - 1,
                     [
                         "Calculator doesn't like subtraction",
                         "Too tired to figure out the carry rules",
@@ -301,9 +302,9 @@ export class Parser {
                 this.checkGiveUp(requestingExpression, 0.5 * v2Len, [
                     "Division is difficult",
                     "Forgot which one was the numerator",
-                    `Doesn't want to risk infinite decimals when dividing by ${Expression.getRoundedString(v2)}`,
+                    `Dividing by ${Expression.getRoundedString(v2)} takes time`,
                     "Too tired to try long division",
-                    "Calculator finds division cofusing",
+                    "Calculator finds fractions cofusing",
                 ]);
                 return v1 / v2;
 
@@ -316,7 +317,7 @@ export class Parser {
                         "That's a lot of numbers to multiply",
                         "Calculator forgot the times table",
                         "Calculator isn't sure how lattice multiplication works; scared of doing it wrong",
-                        `Calculator can't remember how to multiply by ${Expression.getRoundedString(v2)}`,
+                        `Calculator never multiplied by ${Expression.getRoundedString(v2)} before`,
                     ],
                 );
                 return v1 * v2;
