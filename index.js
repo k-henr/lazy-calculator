@@ -478,7 +478,9 @@
       this.resultElement?.classList.add("hidden");
     };
     static getRoundedString = (x) => {
-      return String(Math.round(x * 1e6) / 1e6);
+      if (x > 1e11) return "A lot";
+      const rounded = x.toPrecision(4);
+      return rounded.replace(/(\.)?0*$/, "");
     };
     setContent = (newContent, requestingExpression = this) => {
       this.expressionString = newContent;
@@ -539,7 +541,7 @@
             requestingExpression,
             this.calculator.globalContext
           );
-          this.showResult(_Expression.getRoundedString(this.value));
+          this.showResult(`= ${_Expression.getRoundedString(this.value)}`);
         }
         if (!this.coffeeMode) this.complexityMultiplier = 1;
       } catch (e) {

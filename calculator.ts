@@ -216,8 +216,10 @@ export class Expression {
     };
 
     static getRoundedString = (x: number): string => {
-        // TODO: Smarter rounding with significant digits
-        return String(Math.round(x * 1e6) / 1e6);
+        if (x > 100000000000) return "A lot";
+
+        const rounded = x.toPrecision(4);
+        return rounded.replace(/(\.)?0*$/, ""); // Remove trailing zeores and point if present
     };
 
     setContent = (
@@ -314,7 +316,7 @@ export class Expression {
                     requestingExpression,
                     this.calculator.globalContext,
                 );
-                this.showResult(Expression.getRoundedString(this.value));
+                this.showResult(`= ${Expression.getRoundedString(this.value)}`);
             }
 
             // Reset complexity multiplier if parse succeeded
