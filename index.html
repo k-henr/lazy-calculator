@@ -41,6 +41,7 @@
                 <img src="/icons/plus.svg" />
             </button>
         </div>
+        <div id="expression-error-popup" class="hidden"></div>
     </body>
 
     <!-- A template for expressions -->
@@ -49,13 +50,13 @@
             <input class="expression-edit-field" type="text" />
             <div class="expression-error-wrapper hidden">
                 <img class="expression-error" src="/icons/error.svg" />
-                <div class="expression-error-popup hidden"></div>
             </div>
             <div class="expression-result hidden"></div>
             <img class="remove-expression" src="/icons/cross.svg" />
         </div>
     </template>
 
+    <!-- A template for buttons with options on the error popup -->
     <template id="error-button-template">
         <input type="button" class="expression-error-button" value="TEST" />
     </template>

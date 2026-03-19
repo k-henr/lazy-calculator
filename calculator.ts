@@ -65,7 +65,6 @@ export class Expression {
     element: HTMLElement | null = null;
     resultElement: HTMLElement | null = null;
     errorWrapper: HTMLElement | null = null;
-    errorPopup: HTMLElement | null = null;
 
     definedFunction: string | null = null;
     arguments: string[] = []; // Stores function arguments if this is a function. Kinda yucky
@@ -125,25 +124,12 @@ export class Expression {
                     "Error element not found on expression template!",
                 );
 
-            this.errorPopup = this.element.querySelector(
-                ".expression-error-popup",
-            )!;
-            if (this.errorPopup === null)
-                throw new CalculatorError(
-                    "Error popup not found on expression template!",
-                );
-
             // Add a listener to set the contents of the expression when it changes
             (this.element.querySelector(
                 ".expression-edit-field",
             ) as HTMLInputElement)!.onchange = (e) => {
                 const target = e.target as HTMLInputElement;
                 this.setContent(target.value);
-            };
-
-            // Add a listener for opening an error screen
-            this.errorWrapper.onclick = () => {
-                this.errorPopup?.classList.toggle("hidden");
             };
 
             // Add a listener for removing the expression when the cross is clicked
@@ -161,17 +147,61 @@ export class Expression {
         this.update(requestingExpression);
     }
 
-    showError = (errorText: string) => {
-        this.errorWrapper?.classList.remove("hidden");
-        if (this.errorPopup) this.errorPopup.innerText = errorText;
+    showError = (e: Error) => {
+        if (this.errorWrapper) {
+            this.errorWrapper.classList.remove("hidden");
+            this.errorWrapper.onclick = () => this.showErrorPopup(e);
+        }
+    };
+
+    showErrorPopup = (e: Error) => {
+        if (this.errorWrapper) {
+            const popup = this.calculator.errorPopupElement;
+            // Clear error popup content
+            popup.innerHTML = "";
+            // Position popup correctly
+            popup.classList.remove("hidden");
+            const errorWrapperRect = this.errorWrapper.getBoundingClientRect();
+            console.log(errorWrapperRect);
+            popup.style.top = errorWrapperRect.bottom + "px";
+            popup.style.left =
+                errorWrapperRect.left + errorWrapperRect.width * 0.5 + "px";
+
+            if (e instanceof CalculatorError) {
+                // Set error text to message
+                popup.innerText = "ERROR: " + e.message;
+
+                // If it's a LazyError, add the option buttons with associated callbacks
+                if (e instanceof LazyError) {
+                    // Add response buttons
+                    for (const option of e.options) {
+                        // Create a new button
+                        const button =
+                            this.errorButtonTemplate.content.cloneNode(
+                                true,
+                            ) as HTMLElement;
+
+                        const buttonElement =
+                            button.firstElementChild as HTMLElement;
+                        buttonElement.setAttribute("value", option.name);
+                        buttonElement.onclick = option.callback;
+
+                        this.calculator.errorPopupElement.appendChild(button);
+                    }
+                }
+            } else if (e instanceof Error) {
+                // Set error text to "INTERNAL ERROR: "+message
+                popup.innerText = "INTERNAL ERROR: \n" + e.message;
+            }
+        }
     };
 
     hideError = () => {
         this.errorWrapper?.classList.add("hidden");
-        if (this.errorPopup) {
-            this.errorPopup.innerHTML = "";
-            this.errorPopup.classList.add("hidden");
-        }
+        // Also hides error popup, even if the popup isn't currently focused on the
+        // expression
+        // If this feels weird, make it so that the error only hides when on this
+        this.calculator.errorPopupElement.classList.add("hidden");
     };
 
     showResult = (resultText: string) => {
@@ -292,33 +322,9 @@ export class Expression {
         } catch (e) {
             // Don't catch if this expression doesn't have a visual to error on
             if (!this.element) throw e;
+            if (!(e instanceof Error)) throw e;
 
-            if (e instanceof CalculatorError) {
-                // Set error text to message
-                this.showError("ERROR: " + e.message);
-
-                // If it's a LazyError, add the option buttons with associated callbacks
-                if (e instanceof LazyError) {
-                    // Add response buttons
-                    for (const option of e.options) {
-                        // Create a new button
-                        const button =
-                            this.errorButtonTemplate.content.cloneNode(
-                                true,
-                            ) as HTMLElement;
-
-                        const buttonElement =
-                            button.firstElementChild as HTMLElement;
-                        buttonElement.setAttribute("value", option.name);
-                        buttonElement.onclick = option.callback;
-
-                        this.errorPopup?.appendChild(button);
-                    }
-                }
-            } else if (e instanceof Error) {
-                // Set error text to "INTERNAL ERROR: "+message
-                this.showError("INTERNAL ERROR: \n" + e.message);
-            }
+            this.showError(e);
         }
     };
 
@@ -367,11 +373,13 @@ class JSFunctionExpression extends Expression {
 
 export class Calculator {
     expressionListElement: HTMLElement;
+    errorPopupElement: HTMLElement;
 
     globalContext: CalculatorContext = new CalculatorContext();
 
-    constructor(expressionList: HTMLElement) {
+    constructor(expressionList: HTMLElement, errorPopupElement: HTMLElement) {
         this.expressionListElement = expressionList;
+        this.errorPopupElement = errorPopupElement;
 
         // Add some builtins
         this.globalContext.addLayer({

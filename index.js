@@ -377,7 +377,6 @@
     element = null;
     resultElement = null;
     errorWrapper = null;
-    errorPopup = null;
     definedFunction = null;
     arguments = [];
     // Stores function arguments if this is a function. Kinda yucky
@@ -417,21 +416,11 @@
           throw new CalculatorError(
             "Error element not found on expression template!"
           );
-        this.errorPopup = this.element.querySelector(
-          ".expression-error-popup"
-        );
-        if (this.errorPopup === null)
-          throw new CalculatorError(
-            "Error popup not found on expression template!"
-          );
         this.element.querySelector(
           ".expression-edit-field"
         ).onchange = (e) => {
           const target = e.target;
           this.setContent(target.value);
-        };
-        this.errorWrapper.onclick = () => {
-          this.errorPopup?.classList.toggle("hidden");
         };
         this.element.querySelector(
           ".remove-expression"
@@ -442,16 +431,42 @@
       }
       this.update(requestingExpression);
     }
-    showError = (errorText) => {
-      this.errorWrapper?.classList.remove("hidden");
-      if (this.errorPopup) this.errorPopup.innerText = errorText;
+    showError = (e) => {
+      if (this.errorWrapper) {
+        this.errorWrapper.classList.remove("hidden");
+        this.errorWrapper.onclick = () => this.showErrorPopup(e);
+      }
+    };
+    showErrorPopup = (e) => {
+      if (this.errorWrapper) {
+        const popup = this.calculator.errorPopupElement;
+        popup.innerHTML = "";
+        popup.classList.remove("hidden");
+        const errorWrapperRect = this.errorWrapper.getBoundingClientRect();
+        console.log(errorWrapperRect);
+        popup.style.top = errorWrapperRect.bottom + "px";
+        popup.style.left = errorWrapperRect.left + errorWrapperRect.width * 0.5 + "px";
+        if (e instanceof CalculatorError) {
+          popup.innerText = "ERROR: " + e.message;
+          if (e instanceof LazyError) {
+            for (const option of e.options) {
+              const button = this.errorButtonTemplate.content.cloneNode(
+                true
+              );
+              const buttonElement = button.firstElementChild;
+              buttonElement.setAttribute("value", option.name);
+              buttonElement.onclick = option.callback;
+              this.calculator.errorPopupElement.appendChild(button);
+            }
+          }
+        } else if (e instanceof Error) {
+          popup.innerText = "INTERNAL ERROR: \n" + e.message;
+        }
+      }
     };
     hideError = () => {
       this.errorWrapper?.classList.add("hidden");
-      if (this.errorPopup) {
-        this.errorPopup.innerHTML = "";
-        this.errorPopup.classList.add("hidden");
-      }
+      this.calculator.errorPopupElement.classList.add("hidden");
     };
     showResult = (resultText) => {
       if (this.resultElement) {
@@ -529,22 +544,8 @@
         if (!this.coffeeMode) this.complexityMultiplier = 1;
       } catch (e) {
         if (!this.element) throw e;
-        if (e instanceof CalculatorError) {
-          this.showError("ERROR: " + e.message);
-          if (e instanceof LazyError) {
-            for (const option of e.options) {
-              const button = this.errorButtonTemplate.content.cloneNode(
-                true
-              );
-              const buttonElement = button.firstElementChild;
-              buttonElement.setAttribute("value", option.name);
-              buttonElement.onclick = option.callback;
-              this.errorPopup?.appendChild(button);
-            }
-          }
-        } else if (e instanceof Error) {
-          this.showError("INTERNAL ERROR: \n" + e.message);
-        }
+        if (!(e instanceof Error)) throw e;
+        this.showError(e);
       }
     };
     getValue(requestingExpression, context) {
@@ -574,9 +575,11 @@
   };
   var Calculator = class {
     expressionListElement;
+    errorPopupElement;
     globalContext = new CalculatorContext2();
-    constructor(expressionList2) {
+    constructor(expressionList2, errorPopupElement2) {
       this.expressionListElement = expressionList2;
+      this.errorPopupElement = errorPopupElement2;
       this.globalContext.addLayer({
         functions: {
           sin: JSFunctionExpression.simpleMaths(this, Math.sin),
@@ -653,12 +656,21 @@
   // index.ts
   var expressionList = document.getElementById("expressions");
   if (!expressionList) throw new Error("Couldn't find expression list!");
-  var calculator = new Calculator(expressionList);
+  var errorPopupElement = document.getElementById("expression-error-popup");
+  if (!errorPopupElement) throw new Error("Couldn't find error popup!");
+  var calculator = new Calculator(expressionList, errorPopupElement);
   var expressionAdder = document.getElementById("expression-adder");
   if (expressionAdder) expressionAdder.onclick = () => calculator.addExpression();
   var introCollapser = document.getElementById("collapse-intro");
   var introduction = document.getElementById("introduction");
   if (introCollapser && introduction)
     introCollapser.onclick = () => introduction.classList.toggle("hidden");
+  document.addEventListener("mousedown", (e) => {
+    const bounds = errorPopupElement.getBoundingClientRect();
+    const x = e.clientX, y = e.clientY;
+    if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom) {
+      errorPopupElement.classList.add("hidden");
+    }
+  });
   calculator.addExpression();
 })();

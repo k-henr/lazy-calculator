@@ -107,11 +107,9 @@ body {
     margin: 8px;
 }
 
-.expression-error-popup {
+#expression-error-popup {
     position: absolute;
-    top: calc(90%);
-    left: calc(50%);
-    transform: translateX(-50%);
+    transform: translate(-50%, -5px);
     z-index: 1;
 
     width: 240px;
@@ -148,7 +146,7 @@ body {
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 @media screen and (min-width: 400px) {
