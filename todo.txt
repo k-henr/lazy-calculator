@@ -1,6 +1,6 @@
 TODO:
 - Add lazy errors to built-ins. It feels weird that it's completely fine with doing
-    sqrt(ln(2)) for example. Could be less sophisticated, flat chance?
+    sqrt(ln(2)) for example. Could be less sophisticated, flat chance?s
 - Put up on GHP
 
 Additional ideas:

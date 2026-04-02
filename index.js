@@ -271,41 +271,10 @@
     }
     checkGiveUp(expression, chance, errorTexts) {
       if (Math.random() < chance * expression.complexityMultiplier) {
-        const buttonContents = [
-          "Try again!",
-          "You can do this!",
-          "You can do it!",
-          "Keep trying!",
-          "Keep going!",
-          "Don't give up!",
-          "Stop complaining!",
-          "Don't stop now!",
-          "I believe in you!",
-          "Don't despair!"
-        ];
-        const universalComplaints = [
-          "Do I really need to do this?",
-          "Calculator zoned out",
-          "Calculator is tired today",
-          "Maths is hard",
-          "When will you ever use this in real life?",
-          "Calculator too tired",
-          "Calculator couldn't be bothered",
-          "Calculator is confused"
-        ];
-        const combinedErrorTexts = universalComplaints.concat(errorTexts);
-        throw new LazyError(
-          combinedErrorTexts[Math.floor(Math.random() * combinedErrorTexts.length)],
-          [
-            {
-              name: buttonContents[Math.floor(Math.random() * buttonContents.length)],
-              callback: () => {
-                expression.complexityMultiplier *= 0.75;
-                expression.update();
-              }
-            }
-          ]
-        );
+        LazyError.throwNew(errorTexts, () => {
+          expression.complexityMultiplier *= 0.75;
+          expression.update();
+        });
       }
     }
   };
@@ -330,48 +299,7 @@
     "gim"
   );
 
-  // calculator.ts
-  var CalculatorError = class extends Error {
-    constructor(message) {
-      super(message);
-    }
-  };
-  var LazyError = class extends CalculatorError {
-    options = [];
-    constructor(message, options) {
-      super(message);
-      this.options = options;
-    }
-  };
-  var CalculatorContext2 = class _CalculatorContext {
-    layers = [];
-    addBlankLayer = () => {
-      this.addLayer({
-        variables: {},
-        functions: {}
-      });
-    };
-    addLayer = (layer) => {
-      this.layers.unshift(layer);
-    };
-    getVariable = (name) => {
-      for (const l of this.layers) {
-        if (l.variables[name]) return l.variables[name];
-      }
-      throw new CalculatorError(`Variable "${name}" not found!`);
-    };
-    getFunction = (name) => {
-      for (const l of this.layers) {
-        if (l.functions[name]) return l.functions[name];
-      }
-      throw new CalculatorError(`Function "${name}" not found!`);
-    };
-    copy = () => {
-      const newCtx = new _CalculatorContext();
-      newCtx.layers = [...this.layers];
-      return newCtx;
-    };
-  };
+  // expression.ts
   var Expression = class _Expression {
     calculator;
     element = null;
@@ -487,8 +415,9 @@
     };
     static getRoundedString = (x) => {
       if (x > 1e11) return "A lot";
-      const rounded = x.toPrecision(4);
-      return rounded.replace(/(\.)?0*$/, "");
+      let rounded = x.toPrecision(12);
+      rounded = rounded.replace(/\.0*$|(\.\d*?)0+$/, "$1");
+      return rounded;
     };
     setContent = (newContent, requestingExpression = this) => {
       this.expressionString = newContent;
@@ -580,44 +509,134 @@
   };
   var JSFunctionExpression = class _JSFunctionExpression extends Expression {
     runnable;
-    constructor(calculator2, fnArguments, runnable, addVisual = false, coffeeMode = true) {
+    failChance;
+    lazyErrorTexts;
+    constructor(calculator2, fnArguments, runnable, addVisual = false, coffeeMode = true, failChance = 0, lazyErrorTexts = []) {
       super(calculator2, "", addVisual, coffeeMode);
       this.arguments = fnArguments;
       this.runnable = runnable;
+      this.failChance = failChance;
+      this.lazyErrorTexts = lazyErrorTexts;
     }
-    static simpleMaths(calc, fn) {
+    static simpleMaths(calc, fn, failChance = 0) {
       return new _JSFunctionExpression(
         calc,
         ["x"],
-        (e, ctx) => fn(ctx.getVariable("x").getValue(e, ctx))
+        (e, ctx) => fn(ctx.getVariable("x").getValue(e, ctx)),
+        false,
+        true,
+        failChance
       );
     }
     getValue = (requestingExpression, context) => {
+      if (Math.random() < this.failChance)
+        LazyError.throwNew([], () => {
+          requestingExpression.update();
+        });
       return this.runnable(requestingExpression, context);
     };
   };
-  var Calculator = class {
+
+  // calculator.ts
+  var CalculatorError = class extends Error {
+    constructor(message) {
+      super(message);
+    }
+  };
+  var LazyError = class _LazyError extends CalculatorError {
+    options = [];
+    constructor(message, options) {
+      super(message);
+      this.options = options;
+    }
+    static universalMessages = [
+      "Do I really need to do this?",
+      "Calculator zoned out",
+      "Calculator is tired today",
+      "Maths is hard",
+      "When will you ever use this in real life?",
+      "Calculator too tired",
+      "Calculator couldn't be bothered",
+      "Calculator is confused"
+    ];
+    static universalButtonContent = [
+      "Try again!",
+      "You can do this!",
+      "You can do it!",
+      "Keep trying!",
+      "Keep going!",
+      "Don't give up!",
+      "Stop complaining!",
+      "Don't stop now!",
+      "I believe in you!",
+      "Don't despair!"
+    ];
+    static throwNew = (additionalErrorTexts, buttonCallback) => {
+      const combinedErrorTexts = this.universalMessages.concat(additionalErrorTexts);
+      throw new _LazyError(
+        combinedErrorTexts[Math.floor(Math.random() * combinedErrorTexts.length)],
+        [
+          {
+            name: _LazyError.universalButtonContent[Math.floor(
+              Math.random() * _LazyError.universalButtonContent.length
+            )],
+            callback: buttonCallback
+          }
+        ]
+      );
+    };
+  };
+  var CalculatorContext3 = class _CalculatorContext {
+    layers = [];
+    addBlankLayer = () => {
+      this.addLayer({
+        variables: {},
+        functions: {}
+      });
+    };
+    addLayer = (layer) => {
+      this.layers.unshift(layer);
+    };
+    getVariable = (name) => {
+      for (const l of this.layers) {
+        if (l.variables[name]) return l.variables[name];
+      }
+      throw new CalculatorError(`Variable "${name}" not found!`);
+    };
+    getFunction = (name) => {
+      for (const l of this.layers) {
+        if (l.functions[name]) return l.functions[name];
+      }
+      throw new CalculatorError(`Function "${name}" not found!`);
+    };
+    copy = () => {
+      const newCtx = new _CalculatorContext();
+      newCtx.layers = [...this.layers];
+      return newCtx;
+    };
+  };
+  var Calculator2 = class {
     expressionListElement;
     errorPopupElement;
     erroredExpressions = [];
-    globalContext = new CalculatorContext2();
+    globalContext = new CalculatorContext3();
     constructor(expressionList2, errorPopupElement2) {
       this.expressionListElement = expressionList2;
       this.errorPopupElement = errorPopupElement2;
       this.globalContext.addLayer({
         functions: {
-          sin: JSFunctionExpression.simpleMaths(this, Math.sin),
-          cos: JSFunctionExpression.simpleMaths(this, Math.cos),
-          tan: JSFunctionExpression.simpleMaths(this, Math.tan),
-          arcsin: JSFunctionExpression.simpleMaths(this, Math.asin),
-          arccos: JSFunctionExpression.simpleMaths(this, Math.acos),
-          arctan: JSFunctionExpression.simpleMaths(this, Math.atan),
+          sin: JSFunctionExpression.simpleMaths(this, Math.sin, 0.5),
+          cos: JSFunctionExpression.simpleMaths(this, Math.cos, 0.5),
+          tan: JSFunctionExpression.simpleMaths(this, Math.tan, 0.6),
+          arcsin: JSFunctionExpression.simpleMaths(this, Math.asin, 0.5),
+          arccos: JSFunctionExpression.simpleMaths(this, Math.acos, 0.5),
+          arctan: JSFunctionExpression.simpleMaths(this, Math.atan, 0.6),
           abs: JSFunctionExpression.simpleMaths(this, Math.abs),
           round: JSFunctionExpression.simpleMaths(this, Math.round),
-          ln: JSFunctionExpression.simpleMaths(this, Math.log),
-          log: JSFunctionExpression.simpleMaths(this, Math.log10),
-          sqrt: JSFunctionExpression.simpleMaths(this, Math.sqrt),
-          cbrt: JSFunctionExpression.simpleMaths(this, Math.cbrt),
+          ln: JSFunctionExpression.simpleMaths(this, Math.log, 0.7),
+          log: JSFunctionExpression.simpleMaths(this, Math.log10, 0.7),
+          sqrt: JSFunctionExpression.simpleMaths(this, Math.sqrt, 0.4),
+          cbrt: JSFunctionExpression.simpleMaths(this, Math.cbrt, 0.5),
           round2: new JSFunctionExpression(
             this,
             ["x", "places"],
@@ -635,6 +654,7 @@
         variables: {
           TAU: new Expression(this, "6.283185307179586", false, true),
           PI: new Expression(this, "3.141592653589793", false, true),
+          PAU: new Expression(this, "4.71238898038469", false, true),
           E: new Expression(this, "2.718281828459045", false, true)
         }
       });
@@ -679,7 +699,7 @@
   if (!expressionList) throw new Error("Couldn't find expression list!");
   var errorPopupElement = document.getElementById("expression-error-popup");
   if (!errorPopupElement) throw new Error("Couldn't find error popup!");
-  var calculator = new Calculator(expressionList, errorPopupElement);
+  var calculator = new Calculator2(expressionList, errorPopupElement);
   var expressionAdder = document.getElementById("expression-adder");
   if (expressionAdder) expressionAdder.onclick = () => calculator.addExpression();
   var introCollapser = document.getElementById("collapse-intro");

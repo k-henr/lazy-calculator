@@ -2,9 +2,9 @@ import {
     CalculatorContext,
     CalculatorContextLayer,
     CalculatorError,
-    Expression,
     LazyError,
 } from "./calculator";
+import { Expression } from "./expression";
 
 export class Parser {
     inputString: string;
@@ -341,48 +341,10 @@ export class Parser {
 
     checkGiveUp(expression: Expression, chance: number, errorTexts: string[]) {
         if (Math.random() < chance * expression.complexityMultiplier) {
-            const buttonContents = [
-                "Try again!",
-                "You can do this!",
-                "You can do it!",
-                "Keep trying!",
-                "Keep going!",
-                "Don't give up!",
-                "Stop complaining!",
-                "Don't stop now!",
-                "I believe in you!",
-                "Don't despair!",
-            ];
-
-            const universalComplaints = [
-                "Do I really need to do this?",
-                "Calculator zoned out",
-                "Calculator is tired today",
-                "Maths is hard",
-                "When will you ever use this in real life?",
-                "Calculator too tired",
-                "Calculator couldn't be bothered",
-                "Calculator is confused",
-            ];
-
-            const combinedErrorTexts = universalComplaints.concat(errorTexts);
-
-            throw new LazyError(
-                combinedErrorTexts[
-                    Math.floor(Math.random() * combinedErrorTexts.length)
-                ],
-                [
-                    {
-                        name: buttonContents[
-                            Math.floor(Math.random() * buttonContents.length)
-                        ],
-                        callback: () => {
-                            expression.complexityMultiplier *= 0.75;
-                            expression.update();
-                        },
-                    },
-                ],
-            );
+            LazyError.throwNew(errorTexts, () => {
+                expression.complexityMultiplier *= 0.75;
+                expression.update();
+            });
         }
     }
 }
