@@ -436,6 +436,11 @@
         this.errorWrapper.classList.remove("hidden");
         this.errorWrapper.onclick = () => this.showErrorPopup(e);
       }
+      if (!(e instanceof LazyError)) {
+        if (this.calculator.erroredExpressions.indexOf(this) == -1) {
+          this.calculator.erroredExpressions.push(this);
+        }
+      }
     };
     showErrorPopup = (e) => {
       if (this.errorWrapper) {
@@ -464,6 +469,10 @@
       }
     };
     hideError = () => {
+      const i = this.calculator.erroredExpressions.indexOf(this);
+      if (i > -1) {
+        this.calculator.erroredExpressions.splice(i, 1);
+      }
       this.errorWrapper?.classList.add("hidden");
       this.calculator.errorPopupElement.classList.add("hidden");
     };
@@ -483,7 +492,12 @@
     };
     setContent = (newContent, requestingExpression = this) => {
       this.expressionString = newContent;
-      this.update(requestingExpression);
+      if (this.update(requestingExpression)) {
+        for (const expr of [...this.calculator.erroredExpressions]) {
+          console.log(expr.expressionString);
+          expr.update();
+        }
+      }
     };
     update = (requestingExpression = this) => {
       this.hideError();
@@ -531,10 +545,13 @@
               `${this.definedVariable} = ${_Expression.getRoundedString(this.value)}`
             );
           }
-          for (const user of this.usedBy) {
-            user.update();
-          }
         } else {
+          const ctx = this.calculator.globalContext.layers[0];
+          if (this.definedVariable) {
+            delete ctx.variables[this.definedVariable];
+          } else if (this.definedFunction) {
+            delete ctx.functions[this.definedFunction];
+          }
           this.expressionContent = this.expressionString;
           this.value = this.getValue(
             requestingExpression,
@@ -542,11 +559,16 @@
           );
           this.showResult(`= ${_Expression.getRoundedString(this.value)}`);
         }
+        for (const user of this.usedBy) {
+          user.update();
+        }
         if (!this.coffeeMode) this.complexityMultiplier = 1;
+        return true;
       } catch (e) {
         if (!this.element) throw e;
         if (!(e instanceof Error)) throw e;
         this.showError(e);
+        return false;
       }
     };
     getValue(requestingExpression, context) {
@@ -577,6 +599,7 @@
   var Calculator = class {
     expressionListElement;
     errorPopupElement;
+    erroredExpressions = [];
     globalContext = new CalculatorContext2();
     constructor(expressionList2, errorPopupElement2) {
       this.expressionListElement = expressionList2;
@@ -632,7 +655,13 @@
       if (expression.definedFunction) {
         delete this.globalContext.layers[0].functions[expression.definedFunction];
       } else if (expression.definedVariable) {
-        delete this.globalContext.layers[0].functions[expression.definedVariable];
+        delete this.globalContext.layers[0].variables[expression.definedVariable];
+      }
+      for (const expr of expression.usedBy) {
+        expr.update();
+      }
+      for (const expr of this.erroredExpressions) {
+        expr.update();
       }
     }
     /**

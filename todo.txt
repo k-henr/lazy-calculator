@@ -1,7 +1,8 @@
-- Put up on GHP
-- Reevaluate all errored expressions when setting expression content?
-- Reorder expressions?
-- Update usedBy expressions when an expression is removed
+TODO:
 - Add lazy errors to built-ins. It feels weird that it's completely fine with doing
     sqrt(ln(2)) for example. Could be less sophisticated, flat chance?
+- Put up on GHP
+
+Additional ideas:
+- Reorder expressions?
 - Automatically scroll to bottom when adding an expression to keep mouse on button

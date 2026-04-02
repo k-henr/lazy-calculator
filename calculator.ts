@@ -152,6 +152,15 @@ export class Expression {
             this.errorWrapper.classList.remove("hidden");
             this.errorWrapper.onclick = () => this.showErrorPopup(e);
         }
+
+        // If the error wasn't lazy, we want to reevaluate it when
+        // something changes in the rest of the calculator, so we add it
+        // to the calculator's erroredExpression list if it wasn't already present
+        if (!(e instanceof LazyError)) {
+            if (this.calculator.erroredExpressions.indexOf(this) == -1) {
+                this.calculator.erroredExpressions.push(this);
+            }
+        }
     };
 
     showErrorPopup = (e: Error) => {
@@ -196,6 +205,12 @@ export class Expression {
     };
 
     hideError = () => {
+        // If this expression was present in the errored expression list, remove it
+        const i = this.calculator.erroredExpressions.indexOf(this);
+        if (i > -1) {
+            this.calculator.erroredExpressions.splice(i, 1);
+        }
+
         this.errorWrapper?.classList.add("hidden");
         // Also hides error popup, even if the popup isn't currently focused on the
         // expression
@@ -226,10 +241,17 @@ export class Expression {
         requestingExpression: Expression = this,
     ) => {
         this.expressionString = newContent;
-        this.update(requestingExpression);
+        if (this.update(requestingExpression)) {
+            // If the update succeeded, also update all errored expressions in the
+            // calculator in case this line fixed the error
+            for (const expr of [...this.calculator.erroredExpressions]) {
+                console.log(expr.expressionString);
+                expr.update();
+            }
+        }
     };
 
-    update = (requestingExpression: Expression = this) => {
+    update = (requestingExpression: Expression = this): boolean => {
         this.hideError();
         this.hideResult();
 
@@ -240,7 +262,7 @@ export class Expression {
             // VARIABLE MATCHER:
             // /^\s*(?<VRNAME>[a-z]\w*)\s*=\s*(?<VRDEF>.*)$/gmi
 
-            // If none of the above match, the expression is assumes to be a standalone expression.
+            // If none of the above match, the expression is assumed to be a standalone expression.
 
             const typeMatcher =
                 /^\s*(?<VRNAME>[a-z]\w*)\s*=\s*(?<VRDEF>.*)$|^\s*(?<FNNAME>[a-z]\w*)\s*\(\s*(?<FNARGS>(?:[a-z]\w*(?:\s*,\s*[a-z]\w*\s*)*)?)\s*\)\s*=\s*(?<FNDEF>.*)/im;
@@ -304,12 +326,17 @@ export class Expression {
                         `${this.definedVariable} = ${Expression.getRoundedString(this.value)}`,
                     );
                 }
-
-                // Reevaluate all expressions that used this field
-                for (const user of this.usedBy) {
-                    user.update();
-                }
             } else {
+                // Was just a normal expression
+
+                // If it previously defined a variable, remove that binding
+                const ctx = this.calculator.globalContext.layers[0];
+                if (this.definedVariable) {
+                    delete ctx.variables[this.definedVariable];
+                } else if (this.definedFunction) {
+                    delete ctx.functions[this.definedFunction];
+                }
+
                 this.expressionContent = this.expressionString;
                 this.value = this.getValue(
                     requestingExpression,
@@ -318,14 +345,25 @@ export class Expression {
                 this.showResult(`= ${Expression.getRoundedString(this.value)}`);
             }
 
+            // Reevaluate all expressions that used this field
+            for (const user of this.usedBy) {
+                user.update();
+            }
+
             // Reset complexity multiplier if parse succeeded
             if (!this.coffeeMode) this.complexityMultiplier = 1;
+
+            // Return true, since the parse succeeded
+            return true;
         } catch (e) {
             // Don't catch if this expression doesn't have a visual to error on
             if (!this.element) throw e;
             if (!(e instanceof Error)) throw e;
 
             this.showError(e);
+
+            // Parse failed :(
+            return false;
         }
     };
 
@@ -375,6 +413,8 @@ class JSFunctionExpression extends Expression {
 export class Calculator {
     expressionListElement: HTMLElement;
     errorPopupElement: HTMLElement;
+
+    erroredExpressions: Expression[] = [];
 
     globalContext: CalculatorContext = new CalculatorContext();
 
@@ -443,9 +483,18 @@ export class Calculator {
                 expression.definedFunction
             ];
         } else if (expression.definedVariable) {
-            delete this.globalContext.layers[0].functions[
+            delete this.globalContext.layers[0].variables[
                 expression.definedVariable
             ];
+        }
+
+        // Reevaluate any expressions that depended on this one, and any errored
+        // expressions
+        for (const expr of expression.usedBy) {
+            expr.update();
+        }
+        for (const expr of this.erroredExpressions) {
+            expr.update();
         }
     }
 
